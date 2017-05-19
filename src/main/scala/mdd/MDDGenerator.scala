@@ -69,11 +69,12 @@ object MDDGenerator {
 
   def giveStructure(mdd: MDD, q: Double, rand: Random, ts: Int) = {
     val existing = new HashMap[Int, ArrayBuffer[MDD]]()
+    val cache = new IdMap[MDD, MDD]
 
     def giveStruct(n: MDD, k: Int): MDD = {
       if (n eq MDDLeaf) {
         n
-      } else n.cache(ts) {
+      } else cache.getOrElseUpdate(n, {
         val e = existing.getOrElseUpdate(k, new ArrayBuffer())
         if (e.nonEmpty && rand.nextDouble() < q) {
           e(rand.nextInt(e.size))
@@ -83,14 +84,14 @@ object MDDGenerator {
               .map {
                 case (i, m) => i -> giveStruct(m, k + 1)
               }
-              .toMap)
+              .toSeq)
 
           val r = if (newMDD == n) n else newMDD
           e += r
           r
         }
 
-      }
+      })
     }
 
     giveStruct(mdd, 0)

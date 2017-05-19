@@ -3,7 +3,7 @@ package mdd
 /**
   * Created by vion on 09/05/17.
   */
-trait MiniSet {
+trait MiniSet extends Any {
   def present(i: Int): Boolean
 
   def size: Int
@@ -11,9 +11,26 @@ trait MiniSet {
   def head: Int
 }
 
-class MySet(set: Set[Int]) extends MiniSet {
-  def this(col: Int*) = this(col.toSet)
+object MySet {
+  def apply(col:Int*) = new MySet(col.toSet)
 
+  /**
+    * Actually, just domains.map(_.head).min, just faster...
+    * @param domains
+    * @return
+    */
+  def compOffset(domains: Array[MiniSet]): Int = {
+    var i = domains.length - 1
+    var offset = Int.MaxValue
+    while (i >= 0) {
+      offset = math.min(offset, domains(i).head)
+      i -= 1
+    }
+    offset
+  }
+}
+
+class MySet(val set: Set[Int]) extends AnyVal with MiniSet {
   def present(i: Int) = set(i)
 
   def size = set.size

@@ -9,12 +9,12 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
 
   val t = BDD0 + List(1, 2, 3) + List(1, 3, 4) + List(1, 2, 5) + List(2, 3, 5)
   val s = BDD0 + List(1, 2, 5) + List(1, 3, 4) + List(1, 2, 3) + List(2, 3, 5)
-  val u = BDD(Seq(
+  val u = BDD(MDD(Seq(
     List(1, 2, 3),
     List(1, 3, 4),
     List(1, 2, 5),
-    List(2, 3, 5)))
-  private val ts: BDD = BDD(Seq(List(0, 0), List(0, 1), List(1, 0)))
+    List(2, 3, 5))))
+  private val ts: BDD = BDD(MDD(Seq(List(0, 0), List(0, 1), List(1, 0))))
 
   "MDD" should "detect containment" in {
     ts should contain(Array(0, 1))
@@ -30,35 +30,35 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "iterate over all tuples" in {
-    ts.iterator.size shouldBe ts.lambda
+    ts.iterator.size shouldBe ts.lambda()
   }
 
   it should "compute its size correctly" in {
-    ts.lambda shouldBe BigInt(3)
+    ts.lambda() shouldBe BigInt(3)
 
-    t.lambda shouldBe s.lambda
+    t.lambda() shouldBe s.lambda()
 
-    u.lambda shouldBe t.lambda
+    u.lambda() shouldBe t.lambda()
   }
 
   it should "reduce" in {
-    val m0 = BDD(Seq(
+    val m0 = BDD(MDD(Seq(
       List(2, 3, 2),
       List(1, 2, 1),
       List(1, 1, 1),
       List(1, 1, 3),
       List(3, 1, 1),
-      List(3, 1, 3)))
+      List(3, 1, 3))))
 
     // println(m0.edges(6))
 
-    m0.lambda shouldBe BigInt(6)
+    m0.lambda() shouldBe BigInt(6)
 
     val m = m0.reduce()
 
     withClue(m) {
-      m.lambda shouldBe BigInt(6)
-      m.vertices(new IdMap()) should be <= 13
+      m.lambda() shouldBe BigInt(6)
+      m.vertices() should be <= 13
     }
 
   }
@@ -79,7 +79,7 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
     if (k <= 0) {
       MDDLeaf
     } else {
-      MDD((0 until d).map(i => i -> mdd(d, k - 1)).toMap)
+      MDD((0 until d).map(i => i -> mdd(d, k - 1)))
     }
   }
 
@@ -89,8 +89,8 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
 
     val m1 = mddl(d, k)
 
-    m1.lambda shouldBe BigInt(d).pow(k)
-    m1.vertices(new IdMap()) shouldBe (1 - BigInt(d).pow(k + 1)) / (1 - d) + 1
+    m1.lambda() shouldBe BigInt(d).pow(k)
+    m1.vertices() shouldBe (1 - BigInt(d).pow(k + 1)) / (1 - d) + 1
 
     //val t = System.nanoTime()
     val m = m1.reduce()
@@ -98,12 +98,12 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
 
     //println((e - t) / 1e9)
 
-    m.lambda shouldBe BigInt(d).pow(k)
-    m.vertices(new IdMap()) shouldBe d * k + 2
+    m.lambda() shouldBe BigInt(d).pow(k)
+    m.vertices() shouldBe d * k + 2
 
     val m2 = mdd(d, k)
-    m2.lambda shouldBe BigInt(d).pow(k)
-    m2.edges(1) shouldBe (1 - BigInt(d).pow(k + 1)) / (1 - d) - 1
+    m2.lambda() shouldBe BigInt(d).pow(k)
+    m2.edges() shouldBe (1 - BigInt(d).pow(k + 1)) / (1 - d) - 1
 
     //val t2 = System.nanoTime()
     val m3 = m2.reduce()
@@ -111,41 +111,36 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
 
     //println((e2 - t2) / 1e9)
 
-    m3.lambda shouldBe BigInt(d).pow(k)
-    m3.edges(2) shouldBe d * k
+    m3.lambda() shouldBe BigInt(d).pow(k)
+    m3.edges() shouldBe d * k
 
   }
 
   it should "filter" in {
-    val m = BDD(Seq(
+    val m = BDD(MDD(Seq(
       List(2, 3, 2),
       List(1, 2, 1),
       List(1, 1, 1),
       List(1, 1, 3),
       List(3, 1, 1),
-      List(3, 1, 3)))
+      List(3, 1, 3))))
       .reduce()
 
-    val l1 = new SetWithMax(3)
-    m.fillFound(1, { case t => false }, 0, l1)
+    m.supported(Array.fill(3)(MySet(1, 2, 3)))
 
     //println(l1)
 
     val doms = Array[MiniSet](
-      new MySet(1 to 3: _*),
-      new MySet(1),
-      new MySet(1 to 3: _*))
+      MySet(1 to 3: _*),
+      MySet(1),
+      MySet(1 to 3: _*))
 
-    val n = m.filterTrie(2, doms, List(1), 0)
+    val n = m.filterTrie(doms, List(1))
 
     //println(n)
 
-    val l = new SetWithMax(3)
-    val sup = Array.fill(3)(Set[Int]())
-    n.fillFound(3, {
-      case (p, i) =>
-        sup(p) += i; sup(p).size == 3
-    }, 0, l)
+    n.supported(doms)
+
 
     //println(l)
 
@@ -155,9 +150,9 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
     val rand = new Random(0)
     val mdd = MDDGenerator(15, 5, 600000, rand)
     val mddf = mdd.reduce()
-    val mddl = BDD(mdd.map(_.toList)).reduce()
-    val ef = mddf.edges(5)
-    val el = mddl.vertices(new IdMap())
+    val mddl = BDD(mdd).reduce()
+    val ef = mddf.edges()
+    val el = mddl.vertices()
     ef should be >= el
 
   }
@@ -171,28 +166,27 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
     var mddr = MDDGenerator(d, k, lambda, rand).reduce
     var mddl = BDD(mddr)
 
-    mddr.edges(-2) shouldBe mddl.vertices(new IdMap()) - 2
+    mddr.edges() shouldBe mddl.vertices() - 2
 
-    var doms = IndexedSeq.fill[MySet](k)(new MySet(0 until d: _*))
+    var doms = IndexedSeq.fill[MySet](k)(MySet(0 until d: _*))
 
-    var ts = 1
+
     while (mddr.nonEmpty && mddl.nonEmpty) {
-      mddr.lambda shouldBe mddl.lambda
-      mddr.edges(ts) should be >= mddl.vertices(new IdMap()) - 2
+      mddr.lambda() shouldBe mddl.lambda()
+      mddr.edges() should be >= mddl.vertices() - 2
       mddr should contain theSameElementsAs mddl
-      ts += 1
+
       val mod = List.tabulate(k)(i => i).filter(_ => rand.nextDouble() < .5)
       for (pos <- mod) {
         var newd = doms(pos)
-        while (newd eq doms(pos)) {
+        while (newd == doms(pos)) {
           newd = doms(pos).filter(_ => rand.nextDouble() > .1)
         }
         doms = doms.updated(pos, newd)
       }
 
-      mddr = mddr.filterTrie(ts, doms.toArray, mod, 0)
-      mddl = mddl.filterTrie(ts, doms.toArray, mod, 0)
-      ts += 1
+      mddr = mddr.filterTrie(doms.toArray, mod)
+      mddl = mddl.filterTrie(doms.toArray, mod)
     }
 
     assert(mddr.isEmpty)
@@ -211,30 +205,30 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
 
     val ml = BDD(m)
 
-    m.edges(5) shouldBe ml.vertices(new IdMap()) - 2
+    m.edges() shouldBe ml.vertices() - 2
     m.toSet shouldBe ml.toSet
 
     val mlr = ml.reduce()
-    mlr.edges(new IdMap()) should be <= ml.edges(new IdMap())
+    mlr.edges() should be <= ml.edges()
   }
 
   it should "have correct number of nodes" in {
-    val m = BDD(Seq(
+    val m = BDD(MDD(Seq(
       List(2, 3, 2),
       List(1, 2, 1),
       List(1, 1, 1),
       List(1, 1, 3),
       List(3, 1, 1),
-      List(3, 1, 3)))
+      List(3, 1, 3))))
       .reduce()
 
-    m.vertices(new IdMap()) shouldBe 13
+    m.vertices() shouldBe 13
 
-    val m2 = m.filterTrie(5, Array(new MySet(1, 2, 3), new MySet(1), new MySet(1, 2, 3)), List(1), 0)
+    val m2 = m.filterTrie(Array(MySet(1, 2, 3), MySet(1), MySet(1, 2, 3)), List(1))
 
     //println(m2.toList)
 
-    m2.vertices(new IdMap()) shouldBe 8
+    m2.vertices() shouldBe 8
 
   }
 
@@ -244,18 +238,18 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
       List(0, 1, 1),
       List(1, 1, 1))).reduce();
 
-    m.vertices(new IdMap()) shouldBe 5;
-    m.edges(1) shouldBe 6;
+    m.vertices() shouldBe 5;
+    m.edges() shouldBe 6;
 
     val b = BDD(m)
 
-    b.vertices(new IdMap()) shouldBe 8
-    b.edges(new IdMap()) shouldBe 12
+    b.vertices() shouldBe 8
+    b.edges() shouldBe 12
 
     val b2 = b.reduce()
 
-    b2.vertices(new IdMap()) shouldBe 7
-    b2.edges(new IdMap()) shouldBe 10
+    b2.vertices() shouldBe 7
+    b2.edges() shouldBe 10
 
 
   }

@@ -2,16 +2,14 @@ name := "mdd"
 
 organization := "fr.univ-valenciennes"
 
-version := "1.0.0"
+version := "1.1.0"
 
-scalaVersion := "2.12.1"
-
-crossScalaVersions := Seq("2.11.8", "2.12.1")
+scalaVersion := "2.12.2"
 
 libraryDependencies ++= Seq(
   "fr.univ-valenciennes" %% "bitvectors" % "1.0.0",
-	"org.scalatest" %% "scalatest" % "3.0.1" % "test",
-	"org.scalacheck" %% "scalacheck" % "1.13.4" % "test"
+	"org.scalatest" %% "scalatest" % "3.0.3" % "test",
+	"org.scalacheck" %% "scalacheck" % "1.13.5" % "test"
 	)
 
 scalacOptions ++= Seq(
