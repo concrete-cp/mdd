@@ -8,13 +8,17 @@ import scala.util.hashing.MurmurHash3
 object MDD {
   def apply(data: Traversable[Seq[Int]]): MDD = {
     data.foldLeft[MDD](MDD0)(
-      (acc, tuple) => acc + tuple.toArray) //.reduce(new IdMap[Seq[MDD], MDD]())
+      (acc, tuple) => acc + tuple) //.reduce(new IdMap[Seq[MDD], MDD]())
   }
 
-  def newTrie(i: Int, v: MDD): Array[MDD] = {
-    val t = new Array[MDD](i + 1) //Array.fill[MDD](i + 1)(MDD0)
-    t(i) = v
-    t
+  def fromStarred(data: Traversable[Seq[Seq[Int]]]): MDD = {
+    data.foldLeft[MDD](MDD0) { (acc, starTuple) =>
+      acc.addStarred(starTuple)
+    }
+  }
+
+  def newTrie(i: Int, v: MDD): (Int, Array[MDD]) = {
+    (i, Array(v))
   }
 
   def apply(t: Seq[(Int, MDD)]): MDD = {
@@ -23,17 +27,21 @@ object MDD {
       case Seq() => MDD0
       case Seq((index, child)) => new MDD1(child, index)
       case Seq((i1, c1), (i2, c2)) => new MDD2(c1, i1, c2, i2)
-      case e: Any => new MDDn(newTrie(e: _*))
+      case e: Any => {
+        val (offset, trie) = newTrie(e: _*)
+        new MDDn(offset, trie)
+      }
     }
   }
 
-  def newTrie(t: (Int, MDD)*): Array[MDD] = {
-    val s: Int = t.map(_._1).max
-    val trie = new Array[MDD](s + 1)
+  def newTrie(t: (Int, MDD)*): (Int, Array[MDD]) = {
+    val values = t.view.map(_._1)
+    val offset = values.min
+    val trie = new Array[MDD](values.max - offset + 1)
     for ((i, v) <- t) {
-      trie(i) = v
+      trie(i - offset) = v
     }
-    trie
+    (offset, trie)
   }
 
   def same(t1: Map[Int, MDD], t2: Map[Int, MDD]): Boolean = {
@@ -66,7 +74,6 @@ trait MDD extends Iterable[Seq[Int]] {
         _id = id
         forSubtries { (_, t) =>
           id = t.identify(cache, id + 1)
-          true
         }
         id
       }, i)
@@ -77,6 +84,21 @@ trait MDD extends Iterable[Seq[Int]] {
     val ta = t.toArray
     if (contains(ta)) MDD.this else addTrie(ta, 0)
   }
+
+  def addStarred(starTuple: Seq[Seq[Int]], bIdMap: BIdMap[Seq[Seq[Int]], MDD, MDD] = new BIdMap()): MDD = {
+    if (starTuple.isEmpty) {
+      MDDLeaf
+    } else bIdMap.getOrElseUpdate(starTuple, this, {
+      val tail = starTuple.tail
+      val trie = starTuple.head.foldLeft(traverseST.toMap) { (trie, v) =>
+        val ns = trie.getOrElse(v, MDD0).addStarred(tail, bIdMap)
+        trie.updated(v, ns)
+      }
+
+      MDD(trie.toSeq)
+    })
+  }
+
 
   def addTrie(t: Array[Int], i: Int): MDD
 
@@ -139,7 +161,7 @@ trait MDD extends Iterable[Seq[Int]] {
 
   def traverseST: Traversable[(Int, MDD)] = new Traversable[(Int, MDD)] {
     def foreach[A](f: ((Int, MDD)) => A) {
-      forSubtries { (i, mdd) => f((i, mdd)); true }
+      forSubtries { (i, mdd) => f((i, mdd)) }
     }
   }
 
@@ -180,7 +202,7 @@ trait MDD extends Iterable[Seq[Int]] {
     })
   }
 
-  def forSubtries(f: (Int, MDD) => Boolean): Boolean
+  def forSubtries(f: (Int, MDD) => Unit): Unit
 
   override def isEmpty: Boolean
 
@@ -277,7 +299,7 @@ trait MDD extends Iterable[Seq[Int]] {
 final class MDD1(private val child: MDD, private val index: Int) extends MDD {
   assert(child.nonEmpty)
 
-  def forSubtries(f: (Int, MDD) => Boolean) = {
+  def forSubtries(f: (Int, MDD) => Unit) = {
     f(index, child)
   }
 
@@ -363,8 +385,9 @@ final class MDD2(
   assert(right.nonEmpty)
   assert(left.nonEmpty)
 
-  def forSubtries(f: (Int, MDD) => Boolean): Boolean = {
-    f(leftI, left) && f(rightI, right)
+  def forSubtries(f: (Int, MDD) => Unit): Unit = {
+    f(leftI, left)
+    f(rightI, right)
   }
 
   def addTrie(t: Array[Int], i: Int): MDD =
@@ -387,8 +410,8 @@ final class MDD2(
             new MDD2(left, leftI, nr, rightI)
           }
         case v: Int =>
-          val newArray = MDD.newTrie((leftI, left), (rightI, right), (v, MDD0.addTrie(t, i + 1)))
-          new MDDn(newArray)
+          val (offset, newArray) = MDD.newTrie((leftI, left), (rightI, right), (v, MDD0.addTrie(t, i + 1)))
+          new MDDn(offset, newArray)
 
       }
     }
@@ -475,84 +498,98 @@ final class MDD2(
   }
 }
 
-final class MDDn(private val trie: Array[MDD]) extends MDD {
+final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends MDD {
 
-  assert(indicesIterator.nonEmpty)
+  assert(iterator.nonEmpty)
   assert(trie.forall(m => (m eq null) || m.nonEmpty))
-
-  def forSubtries(f: (Int, MDD) => Boolean): Boolean = {
-    var i = 0
-    var continue = true
-    while (i < trie.length && continue) {
-      if (!isEmpty(trie(i))) {
-        continue = f(i, trie(i))
-      }
-      i += 1
-    }
-    continue
-  }
 
   def addTrie(tuple: Array[Int], i: Int): MDD = {
     if (i >= tuple.length) {
       MDDLeaf
     } else {
       val v = tuple(i)
-      val newTrie = trie.padTo(v + 1, null)
+      val newOffset = math.min(offset, v)
 
-      if (isEmpty(newTrie(v))) {
-        newTrie(v) = MDD0.addTrie(tuple, i + 1)
-        new MDDn(newTrie)
+      // Copy and shift
+      val newTrie = new Array[MDD](math.max(v - newOffset, trie.length - newOffset + offset) + 1)
+      for (i <- 0 until trie.length) {
+        newTrie(i - newOffset + offset) = trie(i)
+      }
+
+      val p = v - newOffset
+
+      if (isEmpty(newTrie(p))) {
+        newTrie(p) = MDD0.addTrie(tuple, i + 1)
+        new MDDn(newOffset, newTrie)
       } else {
-        val ntv = newTrie(v).addTrie(tuple, i + 1)
+        val ntv = newTrie(p).addTrie(tuple, i + 1)
 
-        if (ntv eq newTrie(v)) {
+        if (ntv eq newTrie(p)) {
           this
         } else {
-          newTrie(v) = ntv
-          new MDDn(newTrie)
+          newTrie(p) = ntv
+          new MDDn(newOffset, newTrie)
         }
       }
 
     }
   }
 
+  private def isEmpty(t: MDD) = t eq null
+
   def contains(tuple: Array[Int], i: Int): Boolean = {
-    val v = tuple(i)
+    val v = tuple(i) - offset
     v < trie.length && !isEmpty(trie(v)) && trie(v).contains(tuple, i + 1)
   }
-
-  private def isEmpty(t: MDD) = t eq null
 
   def supported(doms: Array[MiniSet], newDomains: Array[BitVector], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit =
     ts.once(this, {
 
-      forIndices { i =>
+      forValues { i =>
         newDomains(depth) += i
       }
 
       if (newDomains(depth).cardinality == doms(depth).size) l -= depth
 
       if (depth <= l.max) {
-        forIndices { i =>
-          trie(i).supported(doms, newDomains, depth + 1, l, ts)
+        forSubtriesNoOffset { (_, mdd) =>
+          mdd.supported(doms, newDomains, depth + 1, l, ts)
         }
       }
     })
+
+  private def forValues[U](f: Int => U): Unit = {
+    for (i <- 0 until trie.length) {
+      if (!isEmpty(trie(i))) {
+        f(i + offset)
+      }
+    }
+  }
+
+  def forSubtriesNoOffset(f: (Int, MDD) => Unit): Unit = {
+    var i = 0
+    while (i < trie.length) {
+      if (!isEmpty(trie(i))) {
+        f(i, trie(i))
+      }
+      i += 1
+    }
+  }
 
   def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]): MDD =
     if (modified.isEmpty) {
       this
     } else ts.getOrElseUpdate(this, {
-
+      //println(depth + " : " + trie.zipWithIndex.mkString("[", ", ", "]") + " + " + offset)
       val newTrie =
         if (modified.head == depth) {
           // Some change at this level
           filteredTrie(ts, doms, modified.tail, depth)
         } else {
           // No change at this level (=> no need to call f())
-          passedTrie(ts, doms, modified, depth + 1)
+          passedTrie(ts, doms, modified, depth)
         }
-
+      //println(depth + " : " + newTrie.zipWithIndex.mkString("[", ", ", "]") + " + " + offset)
       if (same(newTrie, trie)) {
         this
       } else {
@@ -561,27 +598,14 @@ final class MDDn(private val trie: Array[MDD]) extends MDD {
 
     })
 
-  def iterator = indicesIterator.map(i => (trie(i), i)) flatMap {
-    case (t, i) => t.iterator map (i +: _)
-  }
-
-  def indicesIterator = new Traversable[Int] {
-    def foreach[U](f: Int => U): Unit = forIndices(f)
-  }
-    .toIterator
-
-  private def forIndices[U](f: Int => U): Unit = {
-    for (i <- 0 until trie.length) {
-      if (!isEmpty(trie(i))) {
-        f(i)
-      }
-    }
+  def iterator = traverseST.toIterator.flatMap {
+    case (i, t) => t.iterator map (i +: _)
   }
 
   def edges(ts: IdSet[MDD]): Int = ts.onceOrElse(this, {
     var e = 0
-    forIndices { i =>
-      e += 1 + trie(i).edges(ts)
+    for ((_, mdd) <- traverseST) {
+      e += 1 + mdd.edges(ts)
     }
     e
   }, 0)
@@ -600,16 +624,26 @@ final class MDDn(private val trie: Array[MDD]) extends MDD {
         }
       } else {
 
-        forIndices { index =>
-          if (scope(depth).present(index)) {
-            support(depth) = index
-            val s = trie(index).findSupport(scope, p, i, support, depth + 1, ts)
+        forSubtries { (value, mdd) =>
+          if (scope(depth).present(value)) {
+            support(depth) = value
+            val s = mdd.findSupport(scope, p, i, support, depth + 1, ts)
             if (s.nonEmpty) return s
           }
         }
         None
       },
       None)
+
+  def forSubtries(f: (Int, MDD) => Unit): Unit = {
+    var i = 0
+    while (i < trie.length) {
+      if (!isEmpty(trie(i))) {
+        f(i + offset, trie(i))
+      }
+      i += 1
+    }
+  }
 
   def subMDD(i: Int) = {
     if (i >= trie.length || isEmpty(trie(i))) {
@@ -632,16 +666,16 @@ final class MDDn(private val trie: Array[MDD]) extends MDD {
         i -= 1
       }
       if (i < 0) {
-        new MDD1(t(i1), i1)
+        new MDD1(t(i1), i1 + offset)
       } else {
         val i2 = i
         while (i >= 0 && isEmpty(t(i))) {
           i -= 1
         }
         if (i < 0) {
-          new MDD2(t(i2), i2, t(i1), i1)
+          new MDD2(t(i2), i2 + offset, t(i1), i1 + offset)
         } else {
-          new MDDn(t)
+          new MDDn(offset, t)
         }
       }
     }
@@ -652,14 +686,11 @@ final class MDDn(private val trie: Array[MDD]) extends MDD {
     val trie = this.trie
     val newTrie: Array[MDD] = new Array(trie.length)
 
-    forIndices { i =>
-      doms(depth).present(i) && {
-        val uT = trie(i).filterTrie(doms, modified, depth + 1, ts)
-        if (uT eq MDD0) {
-          false
-        } else {
+    forSubtriesNoOffset { (i, mdd) =>
+      if (doms(depth).present(i + offset)) {
+        val uT = mdd.filterTrie(doms, modified, depth + 1, ts)
+        if (uT ne MDD0) {
           newTrie(i) = uT
-          true
         }
       }
     }
@@ -670,14 +701,11 @@ final class MDDn(private val trie: Array[MDD]) extends MDD {
   private def passedTrie(ts: IdMap[MDD, MDD], doms: Array[MiniSet], modified: List[Int], depth: Int): Array[MDD] = {
     val trie = this.trie
     val newTrie: Array[MDD] = new Array(trie.length)
-
-    forIndices { i =>
-      val nT = trie(i).filterTrie(doms, modified, depth, ts)
-      if (nT eq MDD0) {
-        false
-      } else {
+    val nextDepth = depth + 1
+    forSubtriesNoOffset { (i, mdd) =>
+      val nT = mdd.filterTrie(doms, modified, nextDepth, ts)
+      if (nT ne MDD0) {
         newTrie(i) = nT
-        true
       }
     }
     newTrie
@@ -726,7 +754,7 @@ object MDDLeaf extends MDD {
 
   override def toString = "MDD Leaf"
 
-  def forSubtries(f: (Int, MDD) => Boolean): Boolean = {
+  def forSubtries(f: (Int, MDD) => Unit): Unit = {
     throw new UnsupportedOperationException
   }
 
@@ -790,7 +818,7 @@ final object MDD0 extends MDD {
 
   override def toString = "Empty MDD"
 
-  def forSubtries(f: (Int, MDD) => Boolean) = true
+  def forSubtries(f: (Int, MDD) => Unit) = ()
 
   override def isEmpty = true
 

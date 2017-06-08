@@ -12,7 +12,7 @@ final class SetWithMax(length: Int) extends collection.mutable.Set[Int] {
     candidates -= i
 
     if (i == max) {
-      max = candidates.prevSetBit(max + 1)
+      max = candidates.prevSetBit(max)
     }
     //println(s"- $i -> $this")
     this
@@ -45,7 +45,7 @@ final class SetWithMax(length: Int) extends collection.mutable.Set[Int] {
   }
 
   def iterator: Iterator[Int] = new Iterator[Int] {
-    var i = max
+    var i = SetWithMax.this.max
     def hasNext = (i >= 0)
     def next() = {
       val c = i
