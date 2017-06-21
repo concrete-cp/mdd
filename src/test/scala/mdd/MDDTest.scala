@@ -126,7 +126,7 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
     mdd.lambda() shouldBe BigInt(d).pow(k)
     mdd.edges() shouldBe d * k
 
-    failAfter(Span(5, Seconds))(mdd.reduce)
+    failAfter(Span(20, Seconds))(mdd.reduce)
 
   }
 
