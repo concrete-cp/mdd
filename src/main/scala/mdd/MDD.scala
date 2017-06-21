@@ -7,12 +7,33 @@ import scala.util.hashing.MurmurHash3
 
 object MDD {
   def apply(data: Traversable[Seq[Int]]): MDD = {
-    data.foldLeft[MDD](MDD0)(
-      (acc, tuple) => acc + tuple) //.reduce(new IdMap[Seq[MDD], MDD]())
+    data.headOption.map { h =>
+      grouping(data, 0, h.size)
+    }
+      .getOrElse {
+        MDD0
+      }
+    //
+    //    data.foldLeft[MDD](MDD0)(
+    //      (acc, tuple) => acc + tuple) //.reduce(new IdMap[Seq[MDD], MDD]())
   }
 
+  def grouping(data: Traversable[Seq[Int]], i: Int, arity: Int): MDD = {
+    if (i < arity) {
+      val trie = data
+        .groupBy(tuple => tuple(i))
+        .mapValues(group => grouping(group, i + 1, arity))
+      MDD(trie.toSeq)
+    } else {
+      MDDLeaf
+    }
+  }
+
+
   def fromStarred(data: Traversable[Seq[Seq[Int]]]): MDD = {
-    data.foldLeft[MDD](MDD0) { (acc, starTuple) =>
+    val dat = data.toSeq
+
+    dat.foldLeft[MDD](MDD0) { (acc, starTuple) =>
       acc.addStarred(starTuple)
     }
   }
@@ -99,7 +120,7 @@ trait MDD extends Iterable[Seq[Int]] {
     })
   }
 
-
+  @Deprecated
   def addTrie(t: Array[Int], i: Int): MDD
 
   def reduce(): MDD = {
@@ -275,6 +296,32 @@ trait MDD extends Iterable[Seq[Int]] {
         val trie = traverseST
           .map(e => e._1 -> e._2.insertDim(pos - 1, domain, mdds))
         MDD(trie.toSeq)
+      }
+    })
+  }
+
+  def merge(depths: List[Int], currentDepth: Int = 0, value: Integer = null, mdds: BIdMap[MDD, Integer, MDD] = new BIdMap()): MDD = {
+    mdds.getOrElseUpdate(this, value, {
+      if (depths.isEmpty) {
+        this
+      } else if (currentDepth == depths.head) {
+        if (value == null) {
+          val trie = traverseST
+            .map { case (v, e) => v -> e.merge(depths.tail, currentDepth + 1, v, mdds) }
+          MDD(trie.toSeq)
+        } else {
+          traverseST
+            .filter { case (v, _) => value == v }
+            .map { case (_, e) => e.merge(depths.tail, currentDepth + 1, value, mdds) }
+            .foldLeft[MDD](MDD0)(_ union _)
+        }
+
+      } else {
+        val trie = traverseST
+          .map { case (v, e) => v -> e.merge(depths, currentDepth + 1, value, mdds) }
+
+        MDD(trie.toSeq)
+
       }
     })
   }
@@ -535,11 +582,9 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     }
   }
 
-  private def isEmpty(t: MDD) = t eq null
-
   def contains(tuple: Array[Int], i: Int): Boolean = {
     val v = tuple(i) - offset
-    v < trie.length && !isEmpty(trie(v)) && trie(v).contains(tuple, i + 1)
+    0 <= v && v < trie.length && !isEmpty(trie(v)) && trie(v).contains(tuple, i + 1)
   }
 
   def supported(doms: Array[MiniSet], newDomains: Array[BitVector], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit =
@@ -575,6 +620,8 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
       i += 1
     }
   }
+
+  private def isEmpty(t: MDD) = t eq null
 
   def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]): MDD =
     if (modified.isEmpty) {

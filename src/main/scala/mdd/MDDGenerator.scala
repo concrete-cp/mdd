@@ -48,23 +48,20 @@ object MDDGenerator {
   }
 
   def apply(d: Int, k: Int, lambda: Int, rand: Random): MDD = {
-    var data: MDD = MDD0
+    var data: Set[Seq[Int]] = Set()
     val n = BigInt(d).pow(k)
 
     for (j <- (n - lambda) until n) {
-      val t = tupleSplit(randBigInt(j, rand), d, k)
+      val t = tupleSplit(randBigInt(j, rand), d, k).toSeq
 
-      val newD = data.addTrie(t, 0)
-
-      if (newD eq data) {
-        data = data.addTrie(tupleSplit(j, d, k), 0)
+      if (data(t)) {
+        data += tupleSplit(j, d, k).toSeq
       } else {
-        data = newD
+        data += t
       }
-
     }
 
-    data
+    MDD(data)
   }
 
   def giveStructure(mdd: MDD, q: Double, rand: Random, ts: Int) = {

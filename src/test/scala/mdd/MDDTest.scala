@@ -185,4 +185,55 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
 
   }
 
+  it should "add many many tuples" in {
+    val source = getClass.getResource("tuples2").toURI
+    val tuples = scala.io.Source.fromFile(source, "UTF8").mkString.split("\n").map(_.split(",\\ *").toSeq.map(i => Seq(i.toInt)))
+
+    //for (it <- 0 until 100) {
+      val mdd = MDD.fromStarred(tuples)
+      mdd.lambda() shouldBe tuples.size
+
+      mdd.reduce().lambda() shouldBe tuples.size
+    //}
+
+  }
+
+  it should "merge MDD depths" in {
+    val u = MDD(Seq(
+      Seq(1, 2, 2, 5),
+      Seq(1, 3, 3, 4),
+      Seq(1, 2, 5, 3),
+      Seq(2, 5, 5, 1),
+      Seq(2, 5, 5, 2)))
+
+    val expected = MDD(Seq(
+      Seq(1, 2, 5),
+      Seq(1, 3, 4),
+      Seq(2, 5, 1),
+      Seq(2, 5, 2)
+    ))
+
+    val merged = u.merge(List(1, 2))
+
+    merged should contain theSameElementsAs expected
+
+    val u2 = MDD(Seq(
+      Seq(2, 1, 2, 5),
+      Seq(3, 1, 3, 4),
+      Seq(2, 1, 5, 3),
+      Seq(5, 2, 5, 1),
+      Seq(5, 2, 5, 2)))
+
+    val expected2 = MDD(Seq(
+      Seq(2, 1, 5),
+      Seq(3, 1, 4),
+      Seq(5, 2, 1),
+      Seq(5, 2, 2)
+    ))
+
+    val merged2 = u2.merge(List(0, 2))
+
+    merged2 should contain theSameElementsAs expected2
+  }
+
 }
