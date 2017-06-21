@@ -60,3 +60,5 @@ pomExtra in Global := {
     </developer>
   </developers>
 }
+
+testOptions in Test += Tests.Argument("-oDF")
