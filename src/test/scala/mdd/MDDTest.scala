@@ -1,19 +1,21 @@
 package mdd
 
+import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.concurrent.TimeLimits
+import org.scalatest.prop.PropertyChecks
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{FlatSpec, Inspectors, Matchers}
 
 final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimits {
 
-  val t = MDD0 + Array(1, 2, 3) + Array(1, 3, 4) + Array(1, 2, 5) + Array(2, 3, 5)
-  val s = MDD0 + Array(1, 2, 5) + Array(1, 3, 4) + Array(1, 2, 3) + Array(2, 3, 5)
-  val u = MDD(Seq(
-    Seq(1, 2, 3),
-    Seq(1, 3, 4),
-    Seq(1, 2, 5),
-    Seq(2, 3, 5)))
-  private val ts: MDD = MDD(Seq(Seq(0, 0), Seq(0, 1), Seq(1, 0)))
+  val t = MDD(Array(1, 2, 3), Array(1, 3, 4), Array(1, 2, 5), Array(2, 3, 5))
+  val s = MDD(Array(1, 2, 5), Array(1, 3, 4), Array(1, 2, 3), Array(2, 3, 5))
+  val u = MDD(
+    Array(1, 2, 3),
+    Array(1, 3, 4),
+    Array(1, 2, 5),
+    Array(2, 3, 5))
+  private val ts: MDD = MDD(Array(0, 0), Array(0, 1), Array(1, 0))
 
   "MDD" should "detect containment" in {
     ts should contain(Array(0, 1))
@@ -41,13 +43,13 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
   }
 
   it should "reduce" in {
-    val m = MDD(Seq(
-      Seq(2, 3, 2),
-      Seq(1, 2, 1),
-      Seq(1, 1, 1),
-      Seq(1, 1, 3),
-      Seq(3, 1, 1),
-      Seq(3, 1, 3)))
+    val m = MDD(
+      Array(2, 3, 2),
+      Array(1, 2, 1),
+      Array(1, 1, 1),
+      Array(1, 1, 3),
+      Array(3, 1, 1),
+      Array(3, 1, 3))
       .reduce()
 
     m.lambda() shouldBe BigInt(6)
@@ -56,13 +58,13 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
   }
 
   it should "reduce twice and return same instance" in {
-    val m = MDD(Seq(
-      Seq(2, 3, 2),
-      Seq(1, 2, 1),
-      Seq(1, 1, 1),
-      Seq(1, 1, 3),
-      Seq(3, 1, 1),
-      Seq(3, 1, 3)))
+    val m = MDD(
+      Array(2, 3, 2),
+      Array(1, 2, 1),
+      Array(1, 1, 1),
+      Array(1, 1, 3),
+      Array(3, 1, 1),
+      Array(3, 1, 3))
       .reduce()
 
     m.reduce() shouldBe theSameInstanceAs(m)
@@ -71,13 +73,13 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
   }
 
   it should "have correct number of nodes" in {
-    val m0 = MDD(Seq(
-      Seq(2, 3, 2),
-      Seq(1, 2, 1),
-      Seq(1, 1, 1),
-      Seq(1, 1, 3),
-      Seq(3, 1, 1),
-      Seq(3, 1, 3)))
+    val m0 = MDD(
+      Array(2, 3, 2),
+      Array(1, 2, 1),
+      Array(1, 1, 1),
+      Array(1, 1, 3),
+      Array(3, 1, 1),
+      Array(3, 1, 3))
 
     m0.lambda() shouldBe 6
     m0.nodes() should have('size (9))
@@ -115,10 +117,8 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
       if (k <= 0) MDDLeaf
       else {
         val next = complete(k - 1, d)
-        val trie = (0 until d).map {
-          i => i -> next
-        }
-        MDD(trie)
+        val trie = Seq.tabulate(d)(i => i -> next)
+        MDD.fromTrie(trie)
       }
     }
 
@@ -131,14 +131,14 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
   }
 
   it should "compute unions correctly" in {
-    val r2 = MDD(Seq(
-      Seq(1, 2, 3), Seq(2, 5, 6), Seq(3, 5, 5)))
+    val r2 = MDD(
+      Array(1, 2, 3), Array(2, 5, 6), Array(3, 5, 5))
 
     r2.toSet ++ u should contain theSameElementsAs (u union r2)
   }
 
   it should "intersect" in {
-    val r3 = MDD0 + List(3, 5, 5) + List(1, 2, 2) + List(1, 2, 5) + List(2, 3, 5)
+    val r3 = MDD(Array(3, 5, 5), Array(1, 2, 2), Array(1, 2, 5), Array(2, 3, 5))
     val ri = u.intersect(r3)
 
     val nativeImpl = r3.filter(t => u.contains(t.toArray))
@@ -147,7 +147,7 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
   }
 
   it should "be projected" in {
-    u.project(Set(0, 1)).asInstanceOf[Iterable[_]] should contain theSameElementsAs (Seq(List(1, 2), List(1, 3), List(2, 3)))
+    u.project(Set(0, 1)).asInstanceOf[Iterable[_]] should contain theSameElementsAs Seq(List(1, 2), List(1, 3), List(2, 3))
   }
 
   it should "add dimensions" in {
@@ -158,82 +158,125 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
   }
 
   it should "add starred tuples" in {
-    val tuples =
-      """-1,*,*,*,*,*,*,*,*,*,*,*,*,*,*,*|0,*,*,*,*,*,*,*,*,*,*,*,*,*,*,*|1,-1,0,*,*,*,*,*,*,*,*,*,*,*,*,*|1,0,1,*,*,*,*,*,*,*,*,*,*,*,*,*|1,1,2,*,*,*,*,*,*,*,*,*,*,*,*,*|1,2,3,*,*,*,*,*,*,*,*,*,*,*,*,*|1,3,4,*,*,*,*,*,*,*,*,*,*,*,*,*|1,4,5,*,*,*,*,*,*,*,*,*,*,*,*,*|1,5,6,*,*,*,*,*,*,*,*,*,*,*,*,*|1,6,7,*,*,*,*,*,*,*,*,*,*,*,*,*|1,7,8,*,*,*,*,*,*,*,*,*,*,*,*,*|1,8,9,*,*,*,*,*,*,*,*,*,*,*,*,*|1,9,10,*,*,*,*,*,*,*,*,*,*,*,*,*|1,10,11,*,*,*,*,*,*,*,*,*,*,*,*,*|1,11,12,*,*,*,*,*,*,*,*,*,*,*,*,*|1,12,13,*,*,*,*,*,*,*,*,*,*,*,*,*|1,13,14,*,*,*,*,*,*,*,*,*,*,*,*,*|2,-1,*,0,*,*,*,*,*,*,*,*,*,*,*,*|2,0,*,1,*,*,*,*,*,*,*,*,*,*,*,*|2,1,*,2,*,*,*,*,*,*,*,*,*,*,*,*|2,2,*,3,*,*,*,*,*,*,*,*,*,*,*,*|2,3,*,4,*,*,*,*,*,*,*,*,*,*,*,*|2,4,*,5,*,*,*,*,*,*,*,*,*,*,*,*|2,5,*,6,*,*,*,*,*,*,*,*,*,*,*,*|2,6,*,7,*,*,*,*,*,*,*,*,*,*,*,*|2,7,*,8,*,*,*,*,*,*,*,*,*,*,*,*|2,8,*,9,*,*,*,*,*,*,*,*,*,*,*,*|2,9,*,10,*,*,*,*,*,*,*,*,*,*,*,*|2,10,*,11,*,*,*,*,*,*,*,*,*,*,*,*|2,11,*,12,*,*,*,*,*,*,*,*,*,*,*,*|2,12,*,13,*,*,*,*,*,*,*,*,*,*,*,*|2,13,*,14,*,*,*,*,*,*,*,*,*,*,*,*|3,-1,*,*,0,*,*,*,*,*,*,*,*,*,*,*|3,0,*,*,1,*,*,*,*,*,*,*,*,*,*,*|3,1,*,*,2,*,*,*,*,*,*,*,*,*,*,*|3,2,*,*,3,*,*,*,*,*,*,*,*,*,*,*|3,3,*,*,4,*,*,*,*,*,*,*,*,*,*,*|3,4,*,*,5,*,*,*,*,*,*,*,*,*,*,*|3,5,*,*,6,*,*,*,*,*,*,*,*,*,*,*|3,6,*,*,7,*,*,*,*,*,*,*,*,*,*,*|3,7,*,*,8,*,*,*,*,*,*,*,*,*,*,*|3,8,*,*,9,*,*,*,*,*,*,*,*,*,*,*|3,9,*,*,10,*,*,*,*,*,*,*,*,*,*,*|3,10,*,*,11,*,*,*,*,*,*,*,*,*,*,*|3,11,*,*,12,*,*,*,*,*,*,*,*,*,*,*|3,12,*,*,13,*,*,*,*,*,*,*,*,*,*,*|3,13,*,*,14,*,*,*,*,*,*,*,*,*,*,*|4,-1,*,*,*,0,*,*,*,*,*,*,*,*,*,*|4,0,*,*,*,1,*,*,*,*,*,*,*,*,*,*|4,1,*,*,*,2,*,*,*,*,*,*,*,*,*,*|4,2,*,*,*,3,*,*,*,*,*,*,*,*,*,*|4,3,*,*,*,4,*,*,*,*,*,*,*,*,*,*|4,4,*,*,*,5,*,*,*,*,*,*,*,*,*,*|4,5,*,*,*,6,*,*,*,*,*,*,*,*,*,*|4,6,*,*,*,7,*,*,*,*,*,*,*,*,*,*|4,7,*,*,*,8,*,*,*,*,*,*,*,*,*,*|4,8,*,*,*,9,*,*,*,*,*,*,*,*,*,*|4,9,*,*,*,10,*,*,*,*,*,*,*,*,*,*|4,10,*,*,*,11,*,*,*,*,*,*,*,*,*,*|4,11,*,*,*,12,*,*,*,*,*,*,*,*,*,*|4,12,*,*,*,13,*,*,*,*,*,*,*,*,*,*|4,13,*,*,*,14,*,*,*,*,*,*,*,*,*,*|5,-1,*,*,*,*,0,*,*,*,*,*,*,*,*,*|5,0,*,*,*,*,1,*,*,*,*,*,*,*,*,*|5,1,*,*,*,*,2,*,*,*,*,*,*,*,*,*|5,2,*,*,*,*,3,*,*,*,*,*,*,*,*,*|5,3,*,*,*,*,4,*,*,*,*,*,*,*,*,*|5,4,*,*,*,*,5,*,*,*,*,*,*,*,*,*|5,5,*,*,*,*,6,*,*,*,*,*,*,*,*,*|5,6,*,*,*,*,7,*,*,*,*,*,*,*,*,*|5,7,*,*,*,*,8,*,*,*,*,*,*,*,*,*|5,8,*,*,*,*,9,*,*,*,*,*,*,*,*,*|5,9,*,*,*,*,10,*,*,*,*,*,*,*,*,*|5,10,*,*,*,*,11,*,*,*,*,*,*,*,*,*|5,11,*,*,*,*,12,*,*,*,*,*,*,*,*,*|5,12,*,*,*,*,13,*,*,*,*,*,*,*,*,*|5,13,*,*,*,*,14,*,*,*,*,*,*,*,*,*|6,-1,*,*,*,*,*,0,*,*,*,*,*,*,*,*|6,0,*,*,*,*,*,1,*,*,*,*,*,*,*,*|6,1,*,*,*,*,*,2,*,*,*,*,*,*,*,*|6,2,*,*,*,*,*,3,*,*,*,*,*,*,*,*|6,3,*,*,*,*,*,4,*,*,*,*,*,*,*,*|6,4,*,*,*,*,*,5,*,*,*,*,*,*,*,*|6,5,*,*,*,*,*,6,*,*,*,*,*,*,*,*|6,6,*,*,*,*,*,7,*,*,*,*,*,*,*,*|6,7,*,*,*,*,*,8,*,*,*,*,*,*,*,*|6,8,*,*,*,*,*,9,*,*,*,*,*,*,*,*|6,9,*,*,*,*,*,10,*,*,*,*,*,*,*,*|6,10,*,*,*,*,*,11,*,*,*,*,*,*,*,*|6,11,*,*,*,*,*,12,*,*,*,*,*,*,*,*|6,12,*,*,*,*,*,13,*,*,*,*,*,*,*,*|6,13,*,*,*,*,*,14,*,*,*,*,*,*,*,*|7,-1,*,*,*,*,*,*,0,*,*,*,*,*,*,*|7,0,*,*,*,*,*,*,1,*,*,*,*,*,*,*|7,1,*,*,*,*,*,*,2,*,*,*,*,*,*,*|7,2,*,*,*,*,*,*,3,*,*,*,*,*,*,*|7,3,*,*,*,*,*,*,4,*,*,*,*,*,*,*|7,4,*,*,*,*,*,*,5,*,*,*,*,*,*,*|7,5,*,*,*,*,*,*,6,*,*,*,*,*,*,*|7,6,*,*,*,*,*,*,7,*,*,*,*,*,*,*|7,7,*,*,*,*,*,*,8,*,*,*,*,*,*,*|7,8,*,*,*,*,*,*,9,*,*,*,*,*,*,*|7,9,*,*,*,*,*,*,10,*,*,*,*,*,*,*|7,10,*,*,*,*,*,*,11,*,*,*,*,*,*,*|7,11,*,*,*,*,*,*,12,*,*,*,*,*,*,*|7,12,*,*,*,*,*,*,13,*,*,*,*,*,*,*|7,13,*,*,*,*,*,*,14,*,*,*,*,*,*,*|8,-1,*,*,*,*,*,*,*,0,*,*,*,*,*,*|8,0,*,*,*,*,*,*,*,1,*,*,*,*,*,*|8,1,*,*,*,*,*,*,*,2,*,*,*,*,*,*|8,2,*,*,*,*,*,*,*,3,*,*,*,*,*,*|8,3,*,*,*,*,*,*,*,4,*,*,*,*,*,*|8,4,*,*,*,*,*,*,*,5,*,*,*,*,*,*|8,5,*,*,*,*,*,*,*,6,*,*,*,*,*,*|8,6,*,*,*,*,*,*,*,7,*,*,*,*,*,*|8,7,*,*,*,*,*,*,*,8,*,*,*,*,*,*|8,8,*,*,*,*,*,*,*,9,*,*,*,*,*,*|8,9,*,*,*,*,*,*,*,10,*,*,*,*,*,*|8,10,*,*,*,*,*,*,*,11,*,*,*,*,*,*|8,11,*,*,*,*,*,*,*,12,*,*,*,*,*,*|8,12,*,*,*,*,*,*,*,13,*,*,*,*,*,*|8,13,*,*,*,*,*,*,*,14,*,*,*,*,*,*|9,-1,*,*,*,*,*,*,*,*,0,*,*,*,*,*|9,0,*,*,*,*,*,*,*,*,1,*,*,*,*,*|9,1,*,*,*,*,*,*,*,*,2,*,*,*,*,*|9,2,*,*,*,*,*,*,*,*,3,*,*,*,*,*|9,3,*,*,*,*,*,*,*,*,4,*,*,*,*,*|9,4,*,*,*,*,*,*,*,*,5,*,*,*,*,*|9,5,*,*,*,*,*,*,*,*,6,*,*,*,*,*|9,6,*,*,*,*,*,*,*,*,7,*,*,*,*,*|9,7,*,*,*,*,*,*,*,*,8,*,*,*,*,*|9,8,*,*,*,*,*,*,*,*,9,*,*,*,*,*|9,9,*,*,*,*,*,*,*,*,10,*,*,*,*,*|9,10,*,*,*,*,*,*,*,*,11,*,*,*,*,*|9,11,*,*,*,*,*,*,*,*,12,*,*,*,*,*|9,12,*,*,*,*,*,*,*,*,13,*,*,*,*,*|9,13,*,*,*,*,*,*,*,*,14,*,*,*,*,*|10,-1,*,*,*,*,*,*,*,*,*,0,*,*,*,*|10,0,*,*,*,*,*,*,*,*,*,1,*,*,*,*|10,1,*,*,*,*,*,*,*,*,*,2,*,*,*,*|10,2,*,*,*,*,*,*,*,*,*,3,*,*,*,*|10,3,*,*,*,*,*,*,*,*,*,4,*,*,*,*|10,4,*,*,*,*,*,*,*,*,*,5,*,*,*,*|10,5,*,*,*,*,*,*,*,*,*,6,*,*,*,*|10,6,*,*,*,*,*,*,*,*,*,7,*,*,*,*|10,7,*,*,*,*,*,*,*,*,*,8,*,*,*,*|10,8,*,*,*,*,*,*,*,*,*,9,*,*,*,*|10,9,*,*,*,*,*,*,*,*,*,10,*,*,*,*|10,10,*,*,*,*,*,*,*,*,*,11,*,*,*,*|10,11,*,*,*,*,*,*,*,*,*,12,*,*,*,*|10,12,*,*,*,*,*,*,*,*,*,13,*,*,*,*|10,13,*,*,*,*,*,*,*,*,*,14,*,*,*,*|11,-1,*,*,*,*,*,*,*,*,*,*,0,*,*,*|11,0,*,*,*,*,*,*,*,*,*,*,1,*,*,*|11,1,*,*,*,*,*,*,*,*,*,*,2,*,*,*|11,2,*,*,*,*,*,*,*,*,*,*,3,*,*,*|11,3,*,*,*,*,*,*,*,*,*,*,4,*,*,*|11,4,*,*,*,*,*,*,*,*,*,*,5,*,*,*|11,5,*,*,*,*,*,*,*,*,*,*,6,*,*,*|11,6,*,*,*,*,*,*,*,*,*,*,7,*,*,*|11,7,*,*,*,*,*,*,*,*,*,*,8,*,*,*|11,8,*,*,*,*,*,*,*,*,*,*,9,*,*,*|11,9,*,*,*,*,*,*,*,*,*,*,10,*,*,*|11,10,*,*,*,*,*,*,*,*,*,*,11,*,*,*|11,11,*,*,*,*,*,*,*,*,*,*,12,*,*,*|11,12,*,*,*,*,*,*,*,*,*,*,13,*,*,*|11,13,*,*,*,*,*,*,*,*,*,*,14,*,*,*|12,-1,*,*,*,*,*,*,*,*,*,*,*,0,*,*|12,0,*,*,*,*,*,*,*,*,*,*,*,1,*,*|12,1,*,*,*,*,*,*,*,*,*,*,*,2,*,*|12,2,*,*,*,*,*,*,*,*,*,*,*,3,*,*|12,3,*,*,*,*,*,*,*,*,*,*,*,4,*,*|12,4,*,*,*,*,*,*,*,*,*,*,*,5,*,*|12,5,*,*,*,*,*,*,*,*,*,*,*,6,*,*|12,6,*,*,*,*,*,*,*,*,*,*,*,7,*,*|12,7,*,*,*,*,*,*,*,*,*,*,*,8,*,*|12,8,*,*,*,*,*,*,*,*,*,*,*,9,*,*|12,9,*,*,*,*,*,*,*,*,*,*,*,10,*,*|12,10,*,*,*,*,*,*,*,*,*,*,*,11,*,*|12,11,*,*,*,*,*,*,*,*,*,*,*,12,*,*|12,12,*,*,*,*,*,*,*,*,*,*,*,13,*,*|12,13,*,*,*,*,*,*,*,*,*,*,*,14,*,*|13,-1,*,*,*,*,*,*,*,*,*,*,*,*,0,*|13,0,*,*,*,*,*,*,*,*,*,*,*,*,1,*|13,1,*,*,*,*,*,*,*,*,*,*,*,*,2,*|13,2,*,*,*,*,*,*,*,*,*,*,*,*,3,*|13,3,*,*,*,*,*,*,*,*,*,*,*,*,4,*|13,4,*,*,*,*,*,*,*,*,*,*,*,*,5,*|13,5,*,*,*,*,*,*,*,*,*,*,*,*,6,*|13,6,*,*,*,*,*,*,*,*,*,*,*,*,7,*|13,7,*,*,*,*,*,*,*,*,*,*,*,*,8,*|13,8,*,*,*,*,*,*,*,*,*,*,*,*,9,*|13,9,*,*,*,*,*,*,*,*,*,*,*,*,10,*|13,10,*,*,*,*,*,*,*,*,*,*,*,*,11,*|13,11,*,*,*,*,*,*,*,*,*,*,*,*,12,*|13,12,*,*,*,*,*,*,*,*,*,*,*,*,13,*|13,13,*,*,*,*,*,*,*,*,*,*,*,*,14,*|14,-1,*,*,*,*,*,*,*,*,*,*,*,*,*,0|14,0,*,*,*,*,*,*,*,*,*,*,*,*,*,1|14,1,*,*,*,*,*,*,*,*,*,*,*,*,*,2|14,2,*,*,*,*,*,*,*,*,*,*,*,*,*,3|14,3,*,*,*,*,*,*,*,*,*,*,*,*,*,4|14,4,*,*,*,*,*,*,*,*,*,*,*,*,*,5|14,5,*,*,*,*,*,*,*,*,*,*,*,*,*,6|14,6,*,*,*,*,*,*,*,*,*,*,*,*,*,7|14,7,*,*,*,*,*,*,*,*,*,*,*,*,*,8|14,8,*,*,*,*,*,*,*,*,*,*,*,*,*,9|14,9,*,*,*,*,*,*,*,*,*,*,*,*,*,10|14,10,*,*,*,*,*,*,*,*,*,*,*,*,*,11|14,11,*,*,*,*,*,*,*,*,*,*,*,*,*,12|14,12,*,*,*,*,*,*,*,*,*,*,*,*,*,13|14,13,*,*,*,*,*,*,*,*,*,*,*,*,*,14"""
-        .split("\\|")
-        .map { a =>
-          val s = a.split(",").toSeq
-          s.map {
-            case "*" => -1 to 14
-            case i => Seq(i.toInt)
-          }
-        }
+    val tuples = load("tuples4")
+    val doms = IndexedSeq.fill(16)(-1 to 14)
 
-    val mdd = MDD.fromStarred(tuples)
+    val mdd = MDD.fromStarred(tuples, doms)
     mdd.lambda() shouldBe BigInt("3251598930961498112")
-    mdd.edges() shouldBe 44596
   }
 
   it should "add many tuples" in {
-    val source = getClass.getResource("tuples").toURI
-    val tuples = scala.io.Source.fromFile(source, "UTF8").mkString.split("\\|").map(_.split(",").toSeq.map(i => Seq(i.toInt)))
-
-    val mdd = MDD.fromStarred(tuples)
+    val tuples = load("tuples")
+    val doms = projectDoms(tuples)
+    val mdd = MDD.fromStarred(tuples, doms)
     mdd.lambda() shouldBe tuples.size
 
-    mdd.reduce().lambda() shouldBe tuples.size
+    val unstarred = tuples.map(_.map { case ValueStar(i) => i })
+    val mdd2 = MDD.fromTraversable(unstarred)
+    mdd2.lambda() shouldBe tuples.size
 
+    mdd should contain theSameElementsAs mdd2
+
+    mdd.reduce().edges() shouldBe mdd2.reduce().edges()
+  }
+
+  private def load(r: String): Seq[IndexedSeq[Starrable]] = {
+    val source = Option(getClass.getResource(r)).getOrElse(throw new IllegalStateException(s"Resource $r not found")).toURI
+    scala.io.Source.fromFile(source, "UTF8")
+      .getLines
+      .map(_.split(",\\ *").toIndexedSeq.map {
+        case "*" => Star
+        case i => ValueStar(i.toInt)
+      })
+      .toSeq
+
+  }
+
+  private def projectDoms(tuples: Seq[IndexedSeq[Starrable]]): IndexedSeq[Seq[Int]] = {
+    tuples.headOption.toIndexedSeq.flatMap { h =>
+      Seq.tabulate(h.size) { i => tuples.map(_ (i)).collect { case ValueStar(i) => i }.distinct }
+    }
   }
 
   it should "add many many tuples" in {
-    val source = getClass.getResource("tuples2").toURI
-    val tuples = scala.io.Source.fromFile(source, "UTF8").mkString.split("\n").map(_.split(",\\ *").toSeq.map(i => Seq(i.toInt)))
+    val tuples = load("tuples2")
+    val doms = projectDoms(tuples)
 
-    //for (it <- 0 until 100) {
-      val mdd = MDD.fromStarred(tuples)
-      mdd.lambda() shouldBe tuples.size
+    val mdd = MDD.fromStarred(tuples, doms)
 
-      mdd.reduce().lambda() shouldBe tuples.size
-    //}
+    mdd.lambda() shouldBe tuples.size
+
+    val unstarred = tuples.map(_.map { case ValueStar(i) => i })
+    val mdd2 = MDD.fromTraversable(unstarred)
+    mdd2.lambda() shouldBe tuples.size
 
   }
 
-  it should "merge MDD depths" in {
-    val u = MDD(Seq(
-      Seq(1, 2, 2, 5),
-      Seq(1, 3, 3, 4),
-      Seq(1, 2, 5, 3),
-      Seq(2, 5, 5, 1),
-      Seq(2, 5, 5, 2)))
+  it should "add many starred tuples" in {
+    val tuples = load("tuples3")
+    val doms = projectDoms(tuples)
 
-    val expected = MDD(Seq(
-      Seq(1, 2, 5),
-      Seq(1, 3, 4),
-      Seq(2, 5, 1),
-      Seq(2, 5, 2)
-    ))
+    val mdd = MDD.fromStarred(tuples, doms)
+
+    mdd.lambda() shouldBe BigInt("1284488745117187500")
+
+    //println(mdd.edges())
+    //println(mdd.reduce().edges())
+    // mdd.reduce().lambda() shouldBe size
+  }
+
+  it should "merge MDD depths" in {
+    val u = MDD(
+      Array(1, 2, 2, 5),
+      Array(1, 3, 3, 4),
+      Array(1, 2, 5, 3),
+      Array(2, 5, 5, 1),
+      Array(2, 5, 5, 2))
+
+    val expected = MDD(
+      Array(1, 2, 5),
+      Array(1, 3, 4),
+      Array(2, 5, 1),
+      Array(2, 5, 2)
+    )
 
     val merged = u.merge(List(1, 2))
 
     merged should contain theSameElementsAs expected
 
-    val u2 = MDD(Seq(
-      Seq(2, 1, 2, 5),
-      Seq(3, 1, 3, 4),
-      Seq(2, 1, 5, 3),
-      Seq(5, 2, 5, 1),
-      Seq(5, 2, 5, 2)))
+    val u2 = MDD(
+      Array(2, 1, 2, 5),
+      Array(3, 1, 3, 4),
+      Array(2, 1, 5, 3),
+      Array(5, 2, 5, 1),
+      Array(5, 2, 5, 2))
 
-    val expected2 = MDD(Seq(
-      Seq(2, 1, 5),
-      Seq(3, 1, 4),
-      Seq(5, 2, 1),
-      Seq(5, 2, 2)
-    ))
+    val expected2 = MDD(
+      Array(2, 1, 5),
+      Array(3, 1, 4),
+      Array(5, 2, 1),
+      Array(5, 2, 2)
+    )
 
     val merged2 = u2.merge(List(0, 2))
 
     merged2 should contain theSameElementsAs expected2
+  }
+
+  it should "have same result with fromTraversable and fromStarred" in {
+    val gen = Gen.listOf(Gen.listOfN(2, Gen.chooseNum(-1000, 1000)))
+    PropertyChecks.forAll(gen) { rel: List[List[Int]] =>
+      val relation = rel.distinct.map(_.toIndexedSeq)
+
+      val mdd1 = MDD.fromTraversable(relation).reduce()
+      mdd1.lambda() shouldBe relation.size
+
+      val starred = relation.map(_.map(ValueStar(_)))
+      val mdd2 = MDD.fromStarred(starred, projectDoms(starred)).reduce()
+      mdd2.lambda() shouldBe relation.size
+
+      mdd1.edges() shouldBe mdd2.edges()
+    }
   }
 
 }

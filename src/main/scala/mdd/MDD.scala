@@ -4,36 +4,49 @@ import bitvectors.BitVector
 
 import scala.util.hashing.MurmurHash3
 
-
 object MDD {
-  def apply(data: Traversable[Seq[Int]]): MDD = {
-    data.headOption.map { h =>
-      grouping(data, 0, h.size)
-    }
-      .getOrElse {
-        MDD0
-      }
-    //
-    //    data.foldLeft[MDD](MDD0)(
-    //      (acc, tuple) => acc + tuple) //.reduce(new IdMap[Seq[MDD], MDD]())
+  def fromTraversable(data: Traversable[IndexedSeq[Int]]): MDD = {
+    data.headOption
+      .map(h => grouping(data, 0, h.size))
+      .getOrElse(MDD0)
   }
 
-  def grouping(data: Traversable[Seq[Int]], i: Int, arity: Int): MDD = {
+  def apply(data: IndexedSeq[Int]*) = fromTraversable(data)
+
+  def grouping(data: Traversable[IndexedSeq[Int]], i: Int, arity: Int): MDD = {
     if (i < arity) {
       val trie = data
         .groupBy(tuple => tuple(i))
         .mapValues(group => grouping(group, i + 1, arity))
-      MDD(trie.toSeq)
+      MDD.fromTrie(trie)
     } else {
       MDDLeaf
     }
   }
 
+  def fromStarred(data: Traversable[IndexedSeq[Starrable]], doms: IndexedSeq[Seq[Int]], i: Int = 0): MDD = {
+    if (data.isEmpty) {
+      MDD0
+    } else if (i < doms.length) {
+      val grouped = data
+        .groupBy(tuple => tuple(i))
+        .mapValues(fromStarred(_, doms, i + 1))
 
-  def fromStarred(data: Traversable[Seq[Seq[Int]]]): MDD = {
-    val dat = data.toSeq
+      val child = grouped.getOrElse(Star, MDD0)
 
-    dat.foldLeft[MDD](MDD0) { (acc, starTuple) =>
+      val starredTrie = doms(i)
+        .map(v => v -> grouped.getOrElse(ValueStar(v), MDD0).union(child))
+        .filter(_._2.nonEmpty)
+
+      MDD.fromTrie(starredTrie)
+    } else {
+      MDDLeaf
+    }
+  }
+
+  @deprecated("This implementation has a bad time complexity, use fromStarred(data, doms) instead", "1.4.0")
+  def fromStarred(data: Traversable[List[Seq[Int]]]): MDD = {
+    data.foldLeft[MDD](MDD0) { (acc, starTuple) =>
       acc.addStarred(starTuple)
     }
   }
@@ -42,9 +55,13 @@ object MDD {
     (i, Array(v))
   }
 
-  def apply(t: Seq[(Int, MDD)]): MDD = {
-    assert(t.map(_._1).distinct.size == t.size)
-    t match {
+  def fromTrie(t: Map[Int, MDD]): MDD = fromTrie(t.view)
+
+  def fromTrie(t: Traversable[(Int, MDD)]): MDD = {
+    val s = t.toSeq
+    assert(s.map(_._1).distinct.size == s.size)
+    assert(s.forall(_._2.nonEmpty))
+    s match {
       case Seq() => MDD0
       case Seq((index, child)) => new MDD1(child, index)
       case Seq((i1, c1), (i2, c2)) => new MDD2(c1, i1, c2, i2)
@@ -91,36 +108,35 @@ trait MDD extends Iterable[Seq[Int]] {
       i
     } else {
       cache.onceOrElse(this, {
-        var id = i
-        _id = id
-        forSubtries { (_, t) =>
-          id = t.identify(cache, id + 1)
-        }
-        id
+        _id = i
+        traverseST.foldLeft(i) { case (id, (_, t)) => t.identify(cache, id + 1) }
       }, i)
     }
   }
 
+  @deprecated("+ and addTrie methods are too slow and deprecated, use MDD.apply or MDD.fromTraversable instead", "1.3.0")
   def +(t: Seq[Int]): MDD = {
     val ta = t.toArray
     if (contains(ta)) MDD.this else addTrie(ta, 0)
   }
 
-  def addStarred(starTuple: Seq[Seq[Int]], bIdMap: BIdMap[Seq[Seq[Int]], MDD, MDD] = new BIdMap()): MDD = {
-    if (starTuple.isEmpty) {
-      MDDLeaf
-    } else bIdMap.getOrElseUpdate(starTuple, this, {
-      val tail = starTuple.tail
-      val trie = starTuple.head.foldLeft(traverseST.toMap) { (trie, v) =>
-        val ns = trie.getOrElse(v, MDD0).addStarred(tail, bIdMap)
-        trie.updated(v, ns)
-      }
+  @deprecated("addStarred has bad time complexity, use MDD.fromStarred instead", "1.4.0")
+  def addStarred(starTuple: List[Seq[Int]], bIdMap: BIdMap[List[Seq[Int]], MDD, MDD] = new BIdMap()): MDD = {
+    starTuple match {
+      case Nil => MDDLeaf
+      case st: Any => bIdMap.getOrElseUpdate(st, this, {
+        val head :: tail = st
+        val trie = head.foldLeft(traverseST.toMap) { (trie, v) =>
+          val ns = trie.getOrElse(v, MDD0).addStarred(tail, bIdMap)
+          trie.updated(v, ns)
+        }
 
-      MDD(trie.toSeq)
-    })
+        MDD.fromTrie(trie)
+      })
+    }
   }
 
-  @Deprecated
+  @deprecated("+ and addTrie methods are too slow and deprecated, use MDD.apply or MDD.fromTraversable instead", "1.3.0")
   def addTrie(t: Array[Int], i: Int): MDD
 
   def reduce(): MDD = {
@@ -169,7 +185,7 @@ trait MDD extends Iterable[Seq[Int]] {
         if (same) {
           common(idn) = n
         } else {
-          common(idn) = MDD(newTrie)
+          common(idn) = MDD.fromTrie(newTrie)
         }
       }
       common(idn)
@@ -178,12 +194,6 @@ trait MDD extends Iterable[Seq[Int]] {
 
     step2(this)
 
-  }
-
-  def traverseST: Traversable[(Int, MDD)] = new Traversable[(Int, MDD)] {
-    def foreach[A](f: ((Int, MDD)) => A) {
-      forSubtries { (i, mdd) => f((i, mdd)) }
-    }
   }
 
   def contains(t: Array[Int], i: Int = 0): Boolean
@@ -206,7 +216,9 @@ trait MDD extends Iterable[Seq[Int]] {
 
   def supported(doms: Array[MiniSet], newDomains: Array[BitVector], depth: Int, l: SetWithMax, cache: IdSet[MDD] = new IdSet): Unit
 
-  final def lambda(map: IdMap[MDD, BigInt] = new IdMap): BigInt = {
+  final def lambda(map: IdMap[MDD, BigInt] = new IdMap): BigInt
+
+  = {
     if (this eq MDDLeaf) {
       BigInt(1)
     } else {
@@ -227,7 +239,9 @@ trait MDD extends Iterable[Seq[Int]] {
 
   override def isEmpty: Boolean
 
-  override def equals(o: Any): Boolean = o match {
+  override def equals(o: Any): Boolean
+
+  = o match {
     case MDDLeaf => this eq MDDLeaf
     case t: MDD => {
       val t1 = t.traverseST.toMap
@@ -237,9 +251,16 @@ trait MDD extends Iterable[Seq[Int]] {
     case _ => false
   }
 
+  def traverseST: Traversable[(Int, MDD)] = new Traversable[(Int, MDD)] {
+    def foreach[A](f: ((Int, MDD)) => A) {
+      forSubtries { (i, mdd) => f((i, mdd)) }
+    }
+  }
+
   def subMDD(i: Int): MDD
 
-  override def toString = s"MDD ${System.identityHashCode(this)}, ${edges(new IdSet)} edges, ${vertices(new IdSet)} vertices, ${lambda(new IdMap)} tuples"
+  override def toString =
+    s"MDD ${System.identityHashCode(this)}, ${edges(new IdSet)} edges, ${vertices(new IdSet)} vertices, ${lambda(new IdMap)} tuples"
 
   def nodes(map: IdSet[MDD] = new IdSet): IdSet[MDD] = {
     if (!map.contains(this)) {
@@ -258,7 +279,7 @@ trait MDD extends Iterable[Seq[Int]] {
       val unionTrie = thisTrie ++ otherTrie.map { case (i, m) =>
         i -> thisTrie.getOrElse(i, MDD0).union(m, cache)
       }
-      MDD(unionTrie.toSeq)
+      MDD.fromTrie(unionTrie)
     })
   }
 
@@ -269,7 +290,7 @@ trait MDD extends Iterable[Seq[Int]] {
           i -> this.subMDD(i).intersect(m, cache)
         }
         .filter(_._2.nonEmpty)
-      MDD(interTrie.toSeq)
+      MDD.fromTrie(interTrie)
     })
   }
 
@@ -279,7 +300,7 @@ trait MDD extends Iterable[Seq[Int]] {
         val newTrie = traverseST.map {
           case (i, m) => i -> m.project(c, k + 1, mdds)
         }
-        MDD(newTrie.toSeq)
+        MDD.fromTrie(newTrie)
       } else {
         traverseST
           .map(e => e._2.project(c, k + 1, mdds))
@@ -291,11 +312,11 @@ trait MDD extends Iterable[Seq[Int]] {
   def insertDim(pos: Int, domain: Iterable[Int], mdds: IdMap[MDD, MDD] = new IdMap): MDD = {
     mdds.getOrElseUpdate(this, {
       if (pos == 0) {
-        MDD(domain.map(i => i -> this).toSeq)
+        MDD.fromTrie(domain.map(i => i -> this))
       } else {
         val trie = traverseST
           .map(e => e._1 -> e._2.insertDim(pos - 1, domain, mdds))
-        MDD(trie.toSeq)
+        MDD.fromTrie(trie)
       }
     })
   }
@@ -308,7 +329,7 @@ trait MDD extends Iterable[Seq[Int]] {
         if (value == null) {
           val trie = traverseST
             .map { case (v, e) => v -> e.merge(depths.tail, currentDepth + 1, v, mdds) }
-          MDD(trie.toSeq)
+          MDD.fromTrie(trie)
         } else {
           traverseST
             .filter { case (v, _) => value == v }
@@ -320,7 +341,7 @@ trait MDD extends Iterable[Seq[Int]] {
         val trie = traverseST
           .map { case (v, e) => v -> e.merge(depths, currentDepth + 1, value, mdds) }
 
-        MDD(trie.toSeq)
+        MDD.fromTrie(trie)
 
       }
     })
@@ -565,7 +586,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
 
       val p = v - newOffset
 
-      if (isEmpty(newTrie(p))) {
+      if (newTrie(p) eq null) {
         newTrie(p) = MDD0.addTrie(tuple, i + 1)
         new MDDn(newOffset, newTrie)
       } else {
@@ -584,7 +605,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
 
   def contains(tuple: Array[Int], i: Int): Boolean = {
     val v = tuple(i) - offset
-    0 <= v && v < trie.length && !isEmpty(trie(v)) && trie(v).contains(tuple, i + 1)
+    0 <= v && v < trie.length && (trie(v) ne null) && trie(v).contains(tuple, i + 1)
   }
 
   def supported(doms: Array[MiniSet], newDomains: Array[BitVector], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit =
@@ -605,7 +626,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
 
   private def forValues[U](f: Int => U): Unit = {
     for (i <- 0 until trie.length) {
-      if (!isEmpty(trie(i))) {
+      if (trie(i) ne null) {
         f(i + offset)
       }
     }
@@ -614,14 +635,12 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
   def forSubtriesNoOffset(f: (Int, MDD) => Unit): Unit = {
     var i = 0
     while (i < trie.length) {
-      if (!isEmpty(trie(i))) {
+      if (trie(i) ne null) {
         f(i, trie(i))
       }
       i += 1
     }
   }
-
-  private def isEmpty(t: MDD) = t eq null
 
   def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]): MDD =
     if (modified.isEmpty) {
@@ -663,7 +682,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     ts.onceOrElse(
       this,
       if (depth == p) {
-        if (i >= trie.length || isEmpty(trie(i))) {
+        if (i >= trie.length || (trie(i) eq null)) {
           None
         } else {
           support(depth) = i
@@ -685,7 +704,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
   def forSubtries(f: (Int, MDD) => Unit): Unit = {
     var i = 0
     while (i < trie.length) {
-      if (!isEmpty(trie(i))) {
+      if (trie(i) ne null) {
         f(i + offset, trie(i))
       }
       i += 1
@@ -693,7 +712,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
   }
 
   def subMDD(i: Int) = {
-    if (i >= trie.length || isEmpty(trie(i))) {
+    if (i >= trie.length || (trie(i) eq null)) {
       MDD0
     } else {
       trie(i)
@@ -702,21 +721,21 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
 
   private def newNode(t: Array[MDD]): MDD = {
     var i = t.length - 1
-    while (i >= 0 && isEmpty(t(i))) {
+    while (i >= 0 && (t(i) eq null)) {
       i -= 1
     }
     if (i < 0) {
       MDD0
     } else {
       val i1 = i
-      while (i >= 0 && isEmpty(t(i))) {
+      while (i >= 0 && (t(i) eq null)) {
         i -= 1
       }
       if (i < 0) {
         new MDD1(t(i1), i1 + offset)
       } else {
         val i2 = i
-        while (i >= 0 && isEmpty(t(i))) {
+        while (i >= 0 && (t(i) eq null)) {
           i -= 1
         }
         if (i < 0) {
@@ -760,7 +779,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
 
   private def same(t1: Array[MDD], t2: Array[MDD]): Boolean = {
     def empty(t: Array[MDD], i: Int) = {
-      i >= t.length || isEmpty(t(i))
+      i >= t.length || (t(i) eq null)
     }
 
     (0 until math.max(t1.length, t2.length)).forall { i =>
@@ -827,7 +846,7 @@ object MDDLeaf extends MDD {
 
   override def insertDim(pos: Int, domain: Iterable[Int], mdds: IdMap[MDD, MDD]): MDD = {
     require(pos == 0)
-    mdds.getOrElseUpdate(this, MDD(domain.map(i => i -> this).toSeq))
+    mdds.getOrElseUpdate(this, MDD.fromTrie(domain.map(i => i -> this)))
   }
 
   override def nodes(n: IdSet[MDD]): IdSet[MDD] = {

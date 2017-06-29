@@ -9,12 +9,12 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
 
   val t = BDD0 + List(1, 2, 3) + List(1, 3, 4) + List(1, 2, 5) + List(2, 3, 5)
   val s = BDD0 + List(1, 2, 5) + List(1, 3, 4) + List(1, 2, 3) + List(2, 3, 5)
-  val u = BDD(MDD(Seq(
-    List(1, 2, 3),
-    List(1, 3, 4),
-    List(1, 2, 5),
-    List(2, 3, 5))))
-  private val ts: BDD = BDD(MDD(Seq(List(0, 0), List(0, 1), List(1, 0))))
+  val u = BDD(MDD(
+    Array(1, 2, 3),
+    Array(1, 3, 4),
+    Array(1, 2, 5),
+    Array(2, 3, 5)))
+  private val ts: BDD = BDD(MDD(Array(0, 0), Array(0, 1), Array(1, 0)))
 
   "MDD" should "detect containment" in {
     ts should contain(Array(0, 1))
@@ -42,13 +42,13 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "reduce" in {
-    val m0 = BDD(MDD(Seq(
-      List(2, 3, 2),
-      List(1, 2, 1),
-      List(1, 1, 1),
-      List(1, 1, 3),
-      List(3, 1, 1),
-      List(3, 1, 3))))
+    val m0 = BDD(MDD(
+      Array(2, 3, 2),
+      Array(1, 2, 1),
+      Array(1, 1, 1),
+      Array(1, 1, 3),
+      Array(3, 1, 1),
+      Array(3, 1, 3)))
 
     // println(m0.edges(6))
 
@@ -79,7 +79,7 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
     if (k <= 0) {
       MDDLeaf
     } else {
-      MDD((0 until d).map(i => i -> mdd(d, k - 1)))
+      MDD.fromTrie((0 until d).map(i => i -> mdd(d, k - 1)))
     }
   }
 
@@ -117,13 +117,13 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "filter" in {
-    val m = BDD(MDD(Seq(
-      List(2, 3, 2),
-      List(1, 2, 1),
-      List(1, 1, 1),
-      List(1, 1, 3),
-      List(3, 1, 1),
-      List(3, 1, 3))))
+    val m = BDD(MDD(
+      Array(2, 3, 2),
+      Array(1, 2, 1),
+      Array(1, 1, 1),
+      Array(1, 1, 3),
+      Array(3, 1, 1),
+      Array(3, 1, 3)))
       .reduce()
 
     m.supported(Array.fill(3)(MySet(1, 2, 3)))
@@ -194,13 +194,13 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "convert MDD to BDD" in {
-    val m = MDD(Seq(
-      Seq(2, 3, 2),
-      Seq(1, 2, 1),
-      Seq(1, 1, 1),
-      Seq(1, 1, 3),
-      Seq(3, 1, 1),
-      Seq(3, 1, 3)))
+    val m = MDD(
+      Array(2, 3, 2),
+      Array(1, 2, 1),
+      Array(1, 1, 1),
+      Array(1, 1, 3),
+      Array(3, 1, 1),
+      Array(3, 1, 3))
       .reduce()
 
     val ml = BDD(m)
@@ -213,13 +213,13 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "have correct number of nodes" in {
-    val m = BDD(MDD(Seq(
-      List(2, 3, 2),
-      List(1, 2, 1),
-      List(1, 1, 1),
-      List(1, 1, 3),
-      List(3, 1, 1),
-      List(3, 1, 3))))
+    val m = BDD(MDD(
+      Array(2, 3, 2),
+      Array(1, 2, 1),
+      Array(1, 1, 1),
+      Array(1, 1, 3),
+      Array(3, 1, 1),
+      Array(3, 1, 3)))
       .reduce()
 
     m.vertices() shouldBe 13
@@ -233,13 +233,13 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
   }
 
   it should "have same numbers than in the paper" in {
-    val m = MDD(Seq(
-      List(0, 0, 1),
-      List(0, 1, 1),
-      List(1, 1, 1))).reduce();
+    val m = MDD(
+      Array(0, 0, 1),
+      Array(0, 1, 1),
+      Array(1, 1, 1)).reduce()
 
-    m.vertices() shouldBe 5;
-    m.edges() shouldBe 6;
+    m.vertices() shouldBe 5
+    m.edges() shouldBe 6
 
     val b = BDD(m)
 
