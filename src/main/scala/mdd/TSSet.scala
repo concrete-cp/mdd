@@ -39,10 +39,13 @@ class TSSet[A <: Timestampped[_]](val timestamp: Int = TSSet.nextTS()) {
 
 trait Timestampped[A] {
   var timestamp = -1
+}
+
+trait TSCached[A] extends Timestampped[A] {
   var previous: A = _
 }
 
-class TSMap[A <: Timestampped[B], B](val timestamp: Int = TSSet.nextTS()) {
+class TSMap[A <: TSCached[B], B](val timestamp: Int = TSSet.nextTS()) {
   def getOrElseUpdate(k: A, els: => B): B = {
     if (contains(k)) {
       k.previous

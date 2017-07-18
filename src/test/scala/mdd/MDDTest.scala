@@ -57,6 +57,35 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
 
   }
 
+  it should "reduce quickly" in {
+
+    def mdd(d: Int, k: Int): MDD = {
+      if (k <= 0) {
+        MDDLeaf
+      } else {
+        MDD.fromTrie((0 until d).map(i => i -> mdd(d, k - 1)))
+      }
+    }
+
+    val d = 10
+    val k = 7
+
+    val m2 = mdd(d, k)
+    //m2.lambda() shouldBe BigInt(d).pow(k)
+    // m2.edges() shouldBe (1 - BigInt(d).pow(k + 1)) / (1 - d) - 1
+
+    val t2 = System.nanoTime()
+    val m3 = m2.reduce()
+    val e2 = System.nanoTime()
+
+    // logger.info("MDD:"  + (e2 - t2) / 1e9)
+
+    m3.lambda() shouldBe BigInt(d).pow(k)
+    m3.edges() shouldBe d * k
+  }
+
+
+
   it should "reduce twice and return same instance" in {
     val m = MDD(
       Array(2, 3, 2),
@@ -172,7 +201,7 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
     mdd.lambda() shouldBe tuples.size
 
     val unstarred = tuples.map(_.map { case ValueStar(i) => i })
-    val mdd2 = MDD.fromTraversable(unstarred)
+    val mdd2 = MDD.fromSeq(unstarred)
     mdd2.lambda() shouldBe tuples.size
 
     mdd should contain theSameElementsAs mdd2
@@ -207,7 +236,7 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
     mdd.lambda() shouldBe tuples.size
 
     val unstarred = tuples.map(_.map { case ValueStar(i) => i })
-    val mdd2 = MDD.fromTraversable(unstarred)
+    val mdd2 = MDD.fromSeq(unstarred)
     mdd2.lambda() shouldBe tuples.size
 
   }
@@ -268,7 +297,7 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
     PropertyChecks.forAll(gen) { rel: List[List[Int]] =>
       val relation = rel.distinct.map(_.toIndexedSeq)
 
-      val mdd1 = MDD.fromTraversable(relation).reduce()
+      val mdd1 = MDD.fromSeq(relation).reduce()
       mdd1.lambda() shouldBe relation.size
 
       val starred = relation.map(_.map(ValueStar(_)))

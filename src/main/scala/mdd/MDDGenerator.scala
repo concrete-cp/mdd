@@ -61,7 +61,7 @@ object MDDGenerator {
       }
     }
 
-    MDD.fromTraversable(data)
+    MDD.fromSeq(data.toSeq)
   }
 
   def giveStructure(mdd: MDD, q: Double, rand: Random, ts: Int) = {

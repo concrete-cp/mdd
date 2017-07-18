@@ -16,7 +16,7 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
     Array(2, 3, 5)))
   private val ts: BDD = BDD(MDD(Array(0, 0), Array(0, 1), Array(1, 0)))
 
-  "MDD" should "detect containment" in {
+  "BDD" should "detect containment" in {
     ts should contain(Array(0, 1))
     ts should not contain (Array(1, 1))
 
@@ -63,56 +63,39 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
 
   }
 
-  def mddl(d: Int, k: Int, i: Int = 0): BDD = {
-    if (i >= d) {
-      BDD0
-    }
-    else if (k <= 0) {
-      BDDLeaf
-    }
-    else {
-      new BDDNode(i, mddl(d, k - 1), mddl(d, k, i + 1))
-    }
-  }
 
-  def mdd(d: Int, k: Int): MDD = {
-    if (k <= 0) {
-      MDDLeaf
-    } else {
-      MDD.fromTrie((0 until d).map(i => i -> mdd(d, k - 1)))
-    }
-  }
 
   it should "reduce quickly" in {
-    val d = 6
+
+    def mddl(d: Int, k: Int, i: Int = 0): BDD = {
+      if (i >= d) {
+        BDD0
+      }
+      else if (k <= 0) {
+        BDDLeaf
+      }
+      else {
+        new BDDNode(i, mddl(d, k - 1), mddl(d, k, i + 1))
+      }
+    }
+
+    val d = 10
     val k = 7
 
     val m1 = mddl(d, k)
 
-    m1.lambda() shouldBe BigInt(d).pow(k)
-    m1.vertices() shouldBe (1 - BigInt(d).pow(k + 1)) / (1 - d) + 1
+//    m1.lambda() shouldBe BigInt(d).pow(k)
+//    m1.vertices() shouldBe (1 - BigInt(d).pow(k + 1)) / (1 - d) + 1
 
-    //val t = System.nanoTime()
+    val t = System.nanoTime()
     val m = m1.reduce()
-    //val e = System.nanoTime()
+    val e = System.nanoTime()
 
-    //println((e - t) / 1e9)
+    // println("BDD:" + (e - t) / 1e9)
 
     m.lambda() shouldBe BigInt(d).pow(k)
     m.vertices() shouldBe d * k + 2
 
-    val m2 = mdd(d, k)
-    m2.lambda() shouldBe BigInt(d).pow(k)
-    m2.edges() shouldBe (1 - BigInt(d).pow(k + 1)) / (1 - d) - 1
-
-    //val t2 = System.nanoTime()
-    val m3 = m2.reduce()
-    //val e2 = System.nanoTime()
-
-    //println((e2 - t2) / 1e9)
-
-    m3.lambda() shouldBe BigInt(d).pow(k)
-    m3.edges() shouldBe d * k
 
   }
 
@@ -238,18 +221,23 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
       Array(0, 1, 1),
       Array(1, 1, 1)).reduce()
 
+    m.lambda() shouldBe 3
     m.vertices() shouldBe 5
     m.edges() shouldBe 6
 
     val b = BDD(m)
 
+    b.lambda() shouldBe 3
     b.vertices() shouldBe 8
     b.edges() shouldBe 12
 
     val b2 = b.reduce()
 
-    b2.vertices() shouldBe 7
-    b2.edges() shouldBe 10
+    withClue(b2.mkString("\n")) {
+      b2.lambda() shouldBe 3
+      b2.vertices() shouldBe 7
+      b2.edges() shouldBe 10
+    }
 
 
   }

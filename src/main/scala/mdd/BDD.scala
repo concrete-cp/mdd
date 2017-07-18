@@ -2,7 +2,7 @@ package mdd
 
 import bitvectors.BitVector
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable
 
 object BDD {
   def apply(mdd: MDD): BDD = {
@@ -13,8 +13,12 @@ object BDD {
       if (n eq MDDLeaf) BDDLeaf
       else {
         map.getOrElseUpdate(n, {
-          n.traverseST.toSeq.sortBy(-_._1).foldLeft[BDD](BDD0) {
-            case (acc, (i, m)) => new BDDNode(i, mdd2bdd(m), acc)
+          assert(n.traverseST.toSeq.sliding(2).forall {
+            case Seq(_) => true
+            case Seq(m1, m2) => m1._1 < m2._1
+          })
+          n.traverseST.foldRight[BDD](BDD0) {
+            case ((i, m), acc) => new BDDNode(i, mdd2bdd(m), acc)
           }
         })
       }
@@ -24,10 +28,16 @@ object BDD {
   }
 }
 
-sealed trait BDD extends Iterable[Seq[Int]] with Timestampped[BDD] {
+sealed trait BDD extends Iterable[Seq[Int]] with TSCached[BDD] {
   var id: Int = -1
 
   def +(e: List[Int]): BDD
+
+  def index: Int
+
+  def child: BDD
+
+  def sibling: BDD
 
   def reduce(): BDD = {
 
@@ -53,30 +63,44 @@ sealed trait BDD extends Iterable[Seq[Int]] with Timestampped[BDD] {
   }
 
   def identify(): Int = {
-    val cache = new HashMap[(Int, Int, Int), BDD]()
+    val cache = new mutable.HashMap[(Int, Int, Int), Int]()
+    val traversed = new TSSet[BDD]()
 
     def traverse(n: BDD, i: Int): Int = {
       n match {
-        case nt: BDDNode if n.id < 0 =>
+        case n if (n eq BDD0) || (n eq BDDLeaf) => i
+        case nt: BDDNode => traversed.onceOrElse(nt, {
           val is = traverse(nt.sibling, traverse(nt.child, i))
 
           val idc = nt.child.id
           val ids = nt.sibling.id
 
-          cache.get((nt.index, idc, ids)) match {
-            case Some(m) =>
-              n.id = m.id
-            case None =>
-              n.id = is + 1
-          }
-
-          cache((nt.index, idc, ids)) = n
-          math.max(is, n.id)
-        case _ => math.max(n.id, i)
+          val nid = cache.getOrElseUpdate((nt.index, idc, ids), is + 1)
+          n.id = nid
+          math.max(is, nid)
+        }, i)
       }
     }
 
-    traverse(this, 1)
+    traverse(this, 2)
+
+  }
+
+  def fastIdentify(): Int = {
+    val traversed = new TSSet[BDD]()
+
+    def traverse(n: BDD, i: Int): Int = {
+      n match {
+        case n if (n eq BDD0) || (n eq BDDLeaf) => i
+        case nt: BDDNode => traversed.onceOrElse(nt, {
+          val is = traverse(nt.sibling, traverse(nt.child, i)) + 1
+          n.id = is
+          is
+        }, i)
+      }
+    }
+
+    traverse(this, 2)
 
   }
 
@@ -165,6 +189,10 @@ object BDD0 extends BDD {
 
   protected[mdd] def fillFound(doms: Array[MiniSet], newDomains: Array[BitVector], offset: Int, sizes: Array[Int],
                                l: SetWithMax, depth: Int, cache: TSSet[BDD]): Unit = ()
+
+  def index = throw new UnsupportedOperationException("index of empty BDD")
+  def child = throw new UnsupportedOperationException("child of empty BDD")
+  def sibling = throw new UnsupportedOperationException("sibling of empty BDD")
 }
 
 object BDDLeaf extends BDD {
@@ -210,6 +238,10 @@ object BDDLeaf extends BDD {
                                l: SetWithMax, depth: Int, cache: TSSet[BDD]): Unit = {
     l.clearFrom(depth)
   }
+
+  def index = throw new UnsupportedOperationException("index of BDD leaf")
+  def child = throw new UnsupportedOperationException("child of BDD leaf")
+  def sibling = throw new UnsupportedOperationException("sibling of BDD leaf")
 }
 
 class BDDNode(val index: Int, val child: BDD, val sibling: BDD) extends BDD {
