@@ -114,25 +114,14 @@ sealed trait BDD extends Iterable[Seq[Int]] with TSCached[BDD] {
 
   def depth(map: IdMap[BDD, Int] = new IdMap()): Int
 
-  def supported(domains: Array[MiniSet]): (Array[BitVector], Int) = {
+  def supported(domains: Array[MiniSet], offset:Int): Array[BitVector] = {
     val arity = domains.length
     val newDomains = Array.fill[BitVector](arity)(BitVector.empty)
     val sizes = Array.fill(arity)(0)
-    val offset = MySet.compOffset(domains)
-    //
-    //    def updNewDomains(depth: Int, i: Int) = {
-    //      val od = newDomains(depth)
-    //      val nd = od + (i - offset)
-    //      if (od != nd) {
-    //        newDomains(depth) = nd
-    //        sizes(depth) += 1
-    //      }
-    //      sizes(depth) == domains(depth).size
-    //    }
 
-    fillFound(domains, newDomains, offset: Int, sizes, new SetWithMax(arity), 0, new TSSet())
+    fillFound(domains, newDomains, offset, sizes, new SetWithMax(arity), 0, new TSSet())
 
-    (newDomains, offset)
+    newDomains
   }
 
   def findSupport(ts: IdSet[BDD], scope: IndexedSeq[MiniSet], p: Int, i: Int, support: Array[Int], depth: Int): Option[Array[Int]] = {

@@ -48,7 +48,7 @@ object MDDGenerator {
   }
 
   def apply(d: Int, k: Int, lambda: Int, rand: Random): MDD = {
-    var data: Set[IndexedSeq[Int]] = Set()
+    var data: Set[Array[Int]] = Set()
     val n = BigInt(d).pow(k)
 
     for (j <- (n - lambda) until n) {

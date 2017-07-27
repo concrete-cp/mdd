@@ -209,19 +209,21 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
     mdd.reduce().edges() shouldBe mdd2.reduce().edges()
   }
 
-  private def load(r: String): Seq[IndexedSeq[Starrable]] = {
+  private def load(r: String): Seq[Array[Starrable]] = {
     val source = Option(getClass.getResource(r)).getOrElse(throw new IllegalStateException(s"Resource $r not found")).toURI
     scala.io.Source.fromFile(source, "UTF8")
       .getLines
-      .map(_.split(",\\ *").toIndexedSeq.map {
-        case "*" => Star
-        case i => ValueStar(i.toInt)
-      })
+      .map { l =>
+        l.split(",\\ *").map {
+          case "*" => Star
+          case i => ValueStar(i.toInt)
+        } : Array[Starrable]
+      }
       .toSeq
 
   }
 
-  private def projectDoms(tuples: Seq[IndexedSeq[Starrable]]): IndexedSeq[Seq[Int]] = {
+  private def projectDoms(tuples: Seq[Array[Starrable]]): IndexedSeq[Seq[Int]] = {
     tuples.headOption.toIndexedSeq.flatMap { h =>
       Seq.tabulate(h.size) { i => tuples.map(_ (i)).collect { case ValueStar(i) => i }.distinct }
     }
@@ -294,18 +296,24 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
 
   it should "have same result with fromTraversable and fromStarred" in {
     val gen = Gen.listOf(Gen.listOfN(2, Gen.chooseNum(-1000, 1000)))
-    PropertyChecks.forAll(gen) { rel: List[List[Int]] =>
-      val relation = rel.distinct.map(_.toIndexedSeq)
+    PropertyChecks.forAll(gen) { rel: Seq[Seq[Int]] =>
+      val relation = rel.distinct.map(_.toArray)
 
       val mdd1 = MDD.fromSeq(relation).reduce()
       mdd1.lambda() shouldBe relation.size
 
-      val starred = relation.map(_.map(ValueStar(_)))
+      val starred = relation.map(_.map(ValueStar(_): Starrable))
       val mdd2 = MDD.fromStarred(starred, projectDoms(starred)).reduce()
       mdd2.lambda() shouldBe relation.size
 
       mdd1.edges() shouldBe mdd2.edges()
     }
+  }
+
+  it should "be converted to array" in {
+    u.toArrayArray.foreach(r=>println(r.mkString(" ")))
+    println()
+ts.toArrayArray.foreach(r=>println(r.mkString(" ")))
   }
 
 }

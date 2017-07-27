@@ -5,15 +5,15 @@ import bitvectors.BitVector
 import scala.collection.mutable
 
 object MDD {
-  def fromSeq(data: Seq[IndexedSeq[Int]]): MDD = {
+  def fromSeq(data: Seq[Array[Int]]): MDD = {
     data.headOption
-      .map(h => grouping(data, 0, h.size))
+      .map(h => grouping(data, 0, h.length))
       .getOrElse(MDD0)
   }
 
-  def apply(data: IndexedSeq[Int]*) = fromSeq(data)
+  def apply(data: Array[Int]*) = fromSeq(data)
 
-  def grouping(data: Seq[IndexedSeq[Int]], i: Int, arity: Int): MDD = {
+  def grouping(data: Seq[Array[Int]], i: Int, arity: Int): MDD = {
     if (i < arity) {
       val trie = data
         .groupBy(tuple => tuple(i))
@@ -24,7 +24,7 @@ object MDD {
     }
   }
 
-  def fromStarred(data: Seq[IndexedSeq[Starrable]], doms: IndexedSeq[Seq[Int]], i: Int = 0): MDD = {
+  def fromStarred(data: Seq[Array[Starrable]], doms: IndexedSeq[Seq[Int]], i: Int = 0): MDD = {
     if (data.isEmpty) {
       MDD0
     } else if (i < doms.length) {
@@ -83,6 +83,7 @@ object MDD {
       }
   }
 
+
 }
 
 trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
@@ -90,27 +91,6 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
   var id: Int = -1
 
   override def hashCode: Int = throw new UnsupportedOperationException
-
-  final def identify(): Int = {
-    val cache = new mutable.HashMap[Seq[(Int, Int)], Int]()
-    val traversed = new TSSet[MDD]()
-
-    def traverse(n: MDD, i: Int): Int =
-      if ((n eq MDDLeaf) || (n eq MDD0)) i
-      else traversed.onceOrElse(n, {
-        val children = n.traverseST
-        val is = children.foldLeft(i) { case (i, (_, child)) => traverse(child, i) }
-
-        val id = children.view.map(c => (c._1, c._2.id)).toSeq
-
-        val nid = cache.getOrElseUpdate(id, is + 1)
-        n.id = nid
-        math.max(is, nid)
-      }, i)
-
-
-    traverse(this, 2)
-  }
 
   final def fastIdentify(): Int = {
     val traversed = new IdSet[MDD]()
@@ -126,6 +106,12 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
 
 
     traverse(this, 2)
+  }
+
+  def traverseST: Traversable[(Int, MDD)] = new Traversable[(Int, MDD)] {
+    def foreach[A](f: ((Int, MDD)) => A) {
+      forSubtries { (i, mdd) => f((i, mdd)) }
+    }
   }
 
   @deprecated("+ and addTrie methods are too slow and deprecated, use MDD.apply or MDD.fromSeq instead", "1.3.0")
@@ -170,6 +156,27 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
 
   }
 
+  final def identify(): Int = {
+    val cache = new mutable.HashMap[Seq[(Int, Int)], Int]()
+    val traversed = new TSSet[MDD]()
+
+    def traverse(n: MDD, i: Int): Int =
+      if ((n eq MDDLeaf) || (n eq MDD0)) i
+      else traversed.onceOrElse(n, {
+        val children = n.traverseST
+        val is = children.foldLeft(i) { case (i, (_, child)) => traverse(child, i) }
+
+        val id = children.view.map(c => (c._1, c._2.id)).toSeq
+
+        val nid = cache.getOrElseUpdate(id, is + 1)
+        n.id = nid
+        math.max(is, nid)
+      }, i)
+
+
+    traverse(this, 2)
+  }
+
   def contains(t: Array[Int], i: Int = 0): Boolean
 
   def findSupport(scope: Array[MiniSet], p: Int, i: Int, support: Array[Int], depth: Int = 0, cache: IdSet[MDD] = new IdSet): Option[Array[Int]]
@@ -212,12 +219,6 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
   override def isEmpty: Boolean
 
   override def equals(o: Any): Boolean = throw new UnsupportedOperationException
-
-  def traverseST: Traversable[(Int, MDD)] = new Traversable[(Int, MDD)] {
-    def foreach[A](f: ((Int, MDD)) => A) {
-      forSubtries { (i, mdd) => f((i, mdd)) }
-    }
-  }
 
   def subMDD(i: Int): MDD
 
@@ -324,6 +325,34 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
     }
   }
 
+
+  def toArrayArray: Array[Array[Int]] = {
+    val length = lambda()
+    require(length.isValidInt, s"Cannot create an array of size $length")
+    depth().map { cols =>
+      val array: Array[Array[Int]] = Array.ofDim[Int](length.toInt, cols)
+
+      def fill(mdd: MDD, i: Int, j: Int): Int = {
+        if (mdd eq MDDLeaf) {
+          i + 1
+        } else {
+          var count0 = i
+          mdd.forSubtries { case (v, child) =>
+            val count = fill(child, count0, j + 1)
+            while (count0 < count) {
+              array(count0)(j) = v
+              count0 += 1
+            }
+          }
+          count0
+        }
+      }
+
+      fill(this, 0, 0)
+      array
+    }
+      .getOrElse(Array())
+  }
 }
 
 final class MDD1(private val child: MDD, private val index: Int) extends MDD {
@@ -407,6 +436,7 @@ final class MDD1(private val child: MDD, private val index: Int) extends MDD {
   override def isEmpty = false
 
   def subMDD(i: Int) = if (index == i) child else MDD0
+
 }
 
 final class MDD2(
@@ -599,16 +629,6 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     }
   }
 
-  def forSubtriesNoOffset(f: (Int, MDD) => Unit): Unit = {
-    var i = 0
-    while (i < trie.length) {
-      if (trie(i) ne null) {
-        f(i, trie(i))
-      }
-      i += 1
-    }
-  }
-
   def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]): MDD =
     if (modified.isEmpty) {
       this
@@ -687,6 +707,16 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
       }
     }
     newTrie
+  }
+
+  def forSubtriesNoOffset(f: (Int, MDD) => Unit): Unit = {
+    var i = 0
+    while (i < trie.length) {
+      if (trie(i) ne null) {
+        f(i, trie(i))
+      }
+      i += 1
+    }
   }
 
   private def same(t1: Array[MDD], t2: Array[MDD]): Boolean = {
