@@ -1,18 +1,22 @@
 package mdd
 
-import bitvectors.BitVector
+import java.util
 
-final class SetWithMax(length: Int) extends collection.mutable.Set[Int] {
-  var max = length - 1
-  var candidates = BitVector.filled(length)
+final class SetWithMax(length: Int) extends collection.mutable.Set[Int] with collection.mutable.SetLike[Int, SetWithMax] {
+  var max: Int = length - 1
+  private val candidates: util.BitSet = new util.BitSet(length)
 
-  def +=(i: Int) = ???
+  candidates.set(0, length) //BitVector.filled(length)
 
-  def -=(i: Int) = {
-    candidates -= i
+  override  def empty: SetWithMax = new SetWithMax(0)
+
+  def +=(i: Int): SetWithMax.this.type = ???
+
+  def -=(i: Int): SetWithMax.this.type = {
+    candidates.clear(i)
 
     if (i == max) {
-      max = candidates.prevSetBit(max)
+      max = candidates.previousSetBit(max - 1)
     }
     //println(s"- $i -> $this")
     this
@@ -20,7 +24,7 @@ final class SetWithMax(length: Int) extends collection.mutable.Set[Int] {
 
   def clearFrom(newMax: Int): Unit = {
     if (newMax <= max) {
-      max = candidates.prevSetBit(newMax)
+      max = candidates.previousSetBit(newMax - 1)
     }
     //println(s"clearFrom($newMax) -> $this")
   }
@@ -29,31 +33,31 @@ final class SetWithMax(length: Int) extends collection.mutable.Set[Int] {
     var i = max
     while (i >= 0) {
       f(i)
-      i = candidates.prevSetBit(i)
+      i = candidates.previousSetBit(i-1)
     }
   }
 
-  override def filter(f: Int => Boolean) = {
+  override def filter(f: Int => Boolean): SetWithMax = {
     var i = max
     while (i >= 0) {
       if (!f(i)) {
         this -= i
       }
-      i = candidates.prevSetBit(i)
+      i = candidates.previousSetBit(i-1)
     }
-    SetWithMax.this
+    this
   }
 
   def iterator: Iterator[Int] = new Iterator[Int] {
-    var i = SetWithMax.this.max
-    def hasNext = (i >= 0)
-    def next() = {
+    var i: Int = SetWithMax.this.max
+    def hasNext: Boolean = i >= 0
+    def next(): Int = {
       val c = i
-      i = candidates.prevSetBit(i)
+      i = candidates.previousSetBit(i-1)
       c
     }
   }
 
-  def contains(elem: Int): Boolean = elem <= max && candidates(elem)
+  def contains(elem: Int): Boolean = elem <= max && candidates.get(elem)
 
 }

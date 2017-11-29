@@ -1,6 +1,6 @@
 package mdd
 
-import bitvectors.BitVector
+import java.util
 
 import scala.collection.mutable
 
@@ -11,7 +11,7 @@ object MDD {
       .getOrElse(MDD0)
   }
 
-  def apply(data: Array[Int]*) = fromSeq(data)
+  def apply(data: Array[Int]*): MDD = fromSeq(data)
 
   def grouping(data: Seq[Array[Int]], i: Int, arity: Int): MDD = {
     if (i < arity) {
@@ -195,7 +195,7 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
 
   def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int = 0, cache: IdMap[MDD, MDD] = new IdMap): MDD
 
-  def supported(doms: Array[MiniSet], newDomains: Array[BitVector], depth: Int, l: SetWithMax, cache: IdSet[MDD] = new IdSet): Unit
+  def supported(doms: Array[MiniSet], newDomains: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, cache: IdSet[MDD] = new IdSet): Unit
 
   final def lambda(map: IdMap[MDD, BigInt] = new IdMap): BigInt = {
     if (this eq MDDLeaf) {
@@ -272,6 +272,18 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
     })
   }
 
+
+  def projectOne(depth: Int, mdds: IdMap[MDD, Set[Int]] = new IdMap): Set[Int] = {
+    require(this ne MDDLeaf)
+    mdds.getOrElseUpdate(this, {
+      if (depth == 0) {
+        traverseST.map(_._1).toSet
+      } else {
+        traverseST.map { case (_, subMDD) => subMDD.projectOne(depth - 1, mdds) }.reduce(_ ++ _)
+      }
+    })
+  }
+
   def insertDim(pos: Int, domain: Iterable[Int], mdds: IdMap[MDD, MDD] = new IdMap): MDD = {
     mdds.getOrElseUpdate(this, {
       if (pos == 0) {
@@ -310,22 +322,6 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
     })
   }
 
-  protected def checkSup(domains: Array[MiniSet], p: Int, i: Int, index: Int, next: MDD, support: Array[Int], depth: Int, cache: IdSet[MDD]) = {
-    val ok =
-      if (p == depth) {
-        i == index
-      } else {
-        domains(depth).present(index)
-      }
-    if (ok) {
-      support(depth) = index
-      next.findSupport(domains, p, i, support, depth + 1, cache)
-    } else {
-      None
-    }
-  }
-
-
   def toArrayArray: Array[Array[Int]] = {
     val length = lambda()
     require(length.isValidInt, s"Cannot create an array of size $length")
@@ -353,12 +349,28 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
     }
       .getOrElse(Array())
   }
+
+  protected def checkSup(domains: Array[MiniSet], p: Int, i: Int, index: Int, next: MDD, support: Array[Int], depth: Int, cache: IdSet[MDD]): Option[Array[Int]] = {
+    val ok =
+      if (p == depth) {
+        i == index
+      } else {
+        domains(depth).present(index)
+      }
+    if (ok) {
+      support(depth) = index
+      next.findSupport(domains, p, i, support, depth + 1, cache)
+    } else {
+      None
+    }
+  }
+
 }
 
 final class MDD1(private val child: MDD, private val index: Int) extends MDD {
   assert(child.nonEmpty)
 
-  def forSubtries(f: (Int, MDD) => Unit) = {
+  def forSubtries(f: (Int, MDD) => Unit): Unit = {
     f(index, child)
   }
 
@@ -383,19 +395,19 @@ final class MDD1(private val child: MDD, private val index: Int) extends MDD {
     t(i) == index && child.contains(t, i + 1)
   }
 
-  def findSupport(scope: Array[MiniSet], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]) = {
+  def findSupport(scope: Array[MiniSet], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]): Option[Array[Int]] = {
     ts.onceOrElse(
       this,
       checkSup(scope, p, i, index, child, support, depth, ts),
       None)
   }
 
-  def supported(doms: Array[MiniSet], newDomains: Array[BitVector], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit = {
+  def supported(doms: Array[MiniSet], newDomains: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit = {
     ts.once(
       this,
       if (depth <= l.max) {
-        newDomains(depth) += index
-        if (newDomains(depth).cardinality == doms(depth).size) l -= depth
+        newDomains(depth).add(index)
+        if (newDomains(depth).size == doms(depth).size) l -= depth
         child.supported(doms, newDomains, depth + 1, l, ts)
       }
     )
@@ -487,13 +499,13 @@ final class MDD2(
     case _ => false
   }
 
-  def supported(doms: Array[MiniSet], newDoms: Array[BitVector], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit =
+  def supported(doms: Array[MiniSet], newDoms: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit =
     ts.once(
       this,
       if (depth <= l.max) {
-        newDoms(depth) += leftI
-        newDoms(depth) += rightI
-        if (newDoms(depth).cardinality == doms(depth).size) l -= depth
+        newDoms(depth).add( leftI)
+        newDoms(depth).add( rightI)
+        if (newDoms(depth).size == doms(depth).size) l -= depth
         left.supported(doms, newDoms, depth + 1, l, ts)
         right.supported(doms, newDoms, depth + 1, l, ts)
       })
@@ -605,14 +617,14 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     0 <= v && v < trie.length && (trie(v) ne null) && trie(v).contains(tuple, i + 1)
   }
 
-  def supported(doms: Array[MiniSet], newDomains: Array[BitVector], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit =
+  def supported(doms: Array[MiniSet], newDomains: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit =
     ts.once(this, {
 
       forValues { i =>
-        newDomains(depth) += i
+        newDomains(depth).add( i)
       }
 
-      if (newDomains(depth).cardinality == doms(depth).size) l -= depth
+      if (newDomains(depth).size == doms(depth).size) l -= depth
 
       if (depth <= l.max) {
         forSubtriesNoOffset { (_, mdd) =>
@@ -626,6 +638,16 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
       if (trie(i) ne null) {
         f(i + offset)
       }
+    }
+  }
+
+  def forSubtriesNoOffset(f: (Int, MDD) => Unit): Unit = {
+    var i = 0
+    while (i < trie.length) {
+      if (trie(i) ne null) {
+        f(i, trie(i))
+      }
+      i += 1
     }
   }
 
@@ -709,16 +731,6 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     newTrie
   }
 
-  def forSubtriesNoOffset(f: (Int, MDD) => Unit): Unit = {
-    var i = 0
-    while (i < trie.length) {
-      if (trie(i) ne null) {
-        f(i, trie(i))
-      }
-      i += 1
-    }
-  }
-
   private def same(t1: Array[MDD], t2: Array[MDD]): Boolean = {
     def empty(t: Array[MDD], i: Int) = {
       i >= t.length || (t(i) eq null)
@@ -776,7 +788,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     }
   }
 
-  def subMDD(i: Int) = {
+  def subMDD(i: Int): MDD = {
     val v = i - offset
     if (v < 0 || v >= trie.length || (trie(v) eq null)) {
       MDD0
@@ -805,7 +817,7 @@ object MDDLeaf extends MDD {
     this
   }
 
-  def supported(doms: Array[MiniSet], newDoms: Array[BitVector], depth: Int, l: SetWithMax, ts: IdSet[MDD]) = {
+  def supported(doms: Array[MiniSet], newDoms: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]) = {
     //assert(depth > l.max)
     //println("leaf at depth " + depth)
     l.clearFrom(depth)
@@ -864,7 +876,7 @@ final object MDD0 extends MDD {
 
   def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]) = MDD0
 
-  def supported(doms: Array[MiniSet], nd: Array[BitVector], depth: Int, l: SetWithMax, ts: IdSet[MDD]) = {
+  def supported(doms: Array[MiniSet], nd: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]) = {
     throw new UnsupportedOperationException
   }
 

@@ -1,6 +1,6 @@
 package mdd
 
-import org.scalacheck.{Arbitrary, Gen}
+import org.scalacheck.Gen
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.prop.PropertyChecks
 import org.scalatest.time.{Seconds, Span}
@@ -19,10 +19,10 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
 
   "MDD" should "detect containment" in {
     ts should contain(Array(0, 1))
-    ts should not contain (Array(1, 1))
+    ts should not contain Array(1, 1)
 
     t should contain(Array(1, 3, 4))
-    t should not contain (Array(1, 2, 4))
+    t should not contain Array(1, 2, 4)
 
     forAll(t.toSeq.map(_.toArray)) { tuple =>
       s should contain(tuple)
@@ -155,7 +155,7 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
     mdd.lambda() shouldBe BigInt(d).pow(k)
     mdd.edges() shouldBe d * k
 
-    failAfter(Span(20, Seconds))(mdd.reduce)
+    failAfter(Span(20, Seconds))(mdd.reduce())
 
   }
 
@@ -225,7 +225,7 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
 
   private def projectDoms(tuples: Seq[Array[Starrable]]): IndexedSeq[Seq[Int]] = {
     tuples.headOption.toIndexedSeq.flatMap { h =>
-      Seq.tabulate(h.size) { i => tuples.map(_ (i)).collect { case ValueStar(i) => i }.distinct }
+      Seq.tabulate(h.length) { i => tuples.map(_ (i)).collect { case ValueStar(i) => i }.distinct }
     }
   }
 
@@ -311,9 +311,12 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
   }
 
   it should "be converted to array" in {
-    u.toArrayArray.foreach(r=>println(r.mkString(" ")))
-    println()
-ts.toArrayArray.foreach(r=>println(r.mkString(" ")))
+    val uaa: Seq[Seq[Int]] = u.toArrayArray.view.map(_.toSeq)
+    val ua: Seq[Seq[Int]] = u.toSeq
+    uaa should contain theSameElementsAs ua
+
+    val tsaa = ts.toArrayArray.view.map(_.toSeq)
+    tsaa should contain theSameElementsAs ts.toSeq
   }
 
 }

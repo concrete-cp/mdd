@@ -2,13 +2,12 @@ name := "mdd"
 
 organization := "fr.univ-valenciennes"
 
-version := "1.5.1"
+version := "1.5.2-SNAPSHOT"
 
-scalaVersion := "2.12.2"
+scalaVersion := "2.12.4"
 
 libraryDependencies ++= Seq(
-  "fr.univ-valenciennes" %% "bitvectors" % "1.0.0",
-	"org.scalatest" %% "scalatest" % "3.0.3" % "test",
+	"org.scalatest" %% "scalatest" % "3.0.4" % "test",
 	"org.scalacheck" %% "scalacheck" % "1.13.5" % "test"
 	)
 
@@ -35,9 +34,8 @@ publishTo :=  {
 
 publishArtifact in Test := false
 
-testOptions in Test <+= (target in Test) map {
-  t => Tests.Argument(TestFrameworks.ScalaTest, "-u", s"${t / "test-reports"}")
-}
+testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-u", s"${(target in Test).value / "test-reports"}")
+
 
 // EclipseKeys.withBundledScalaContainers := false
 licenses := Seq("LGPL 3.0" -> url("https://www.gnu.org/licenses/lgpl-3.0.txt"))

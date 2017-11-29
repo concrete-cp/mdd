@@ -109,7 +109,7 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
       Array(3, 1, 3)))
       .reduce()
 
-    m.supported(Array.fill(3)(MySet(1, 2, 3)), 1)
+    m.supported(Array.fill(3)(MySet(1, 2, 3)))
 
     //println(l1)
 
@@ -122,7 +122,7 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
 
     //println(n)
 
-    n.supported(doms, 1)
+    n.supported(doms)
 
 
     //println(l)
