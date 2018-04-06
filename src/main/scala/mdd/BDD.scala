@@ -106,7 +106,7 @@ sealed trait BDD extends Iterable[Seq[Int]] with TSCached[BDD] {
 
   }
 
-  def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int = 0, ts: TSMap[BDD, BDD] = new TSMap[BDD, BDD]()): BDD
+  def filterTrie(doms: Array[Set[Int]], modified: List[Int], depth: Int = 0, ts: TSMap[BDD, BDD] = new TSMap[BDD, BDD]()): BDD
 
   def contains(e: Seq[Int]): Boolean
 
@@ -116,7 +116,7 @@ sealed trait BDD extends Iterable[Seq[Int]] with TSCached[BDD] {
 
   def depth(map: IdMap[BDD, Int] = new IdMap()): Int
 
-  def supported(domains: Array[MiniSet]): Array[util.HashSet[Int]] = {
+  def supported(domains: Array[Set[Int]]): Array[util.HashSet[Int]] = {
     val arity = domains.length
     val newDomains = Array.fill(arity)(new util.HashSet[Int]())
     val sizes = Array.fill(arity)(0)
@@ -126,18 +126,18 @@ sealed trait BDD extends Iterable[Seq[Int]] with TSCached[BDD] {
     newDomains
   }
 
-  def findSupport(ts: IdSet[BDD], scope: IndexedSeq[MiniSet], p: Int, i: Int, support: Array[Int], depth: Int): Option[Array[Int]] = {
+  def findSupport(ts: IdSet[BDD], scope: IndexedSeq[Set[Int]], p: Int, i: Int, support: Array[Int], depth: Int): Option[Array[Int]] = {
     ???
   }
 
   def lambda(map: IdMap[BDD, BigInt] = new IdMap): BigInt
 
-  protected[mdd] def fillFound(doms: Array[MiniSet], newDomains: Array[util.HashSet[Int]], sizes: Array[Int],
+  protected[mdd] def fillFound(doms: Array[Set[Int]], newDomains: Array[util.HashSet[Int]], sizes: Array[Int],
                                l: SetWithMax, depth: Int, cache: TSSet[BDD]): Unit
 
-  protected[mdd] def passTrie(ts: TSMap[BDD, BDD], doms: Array[MiniSet], modified: List[Int], depth: Int): BDD
+  protected[mdd] def passTrie(ts: TSMap[BDD, BDD], doms: Array[Set[Int]], modified: List[Int], depth: Int): BDD
 
-  protected[mdd] def filterModifiedTrie(ts: TSMap[BDD, BDD], doms: Array[MiniSet], modified: List[Int], depth: Int): BDD
+  protected[mdd] def filterModifiedTrie(ts: TSMap[BDD, BDD], doms: Array[Set[Int]], modified: List[Int], depth: Int): BDD
 }
 
 class BDDNode(val index: Int, val child: BDD, val sibling: BDD) extends BDD {
@@ -189,7 +189,7 @@ class BDDNode(val index: Int, val child: BDD, val sibling: BDD) extends BDD {
       2 + child.edges(map) + sibling.edges(map)
       , 0)
 
-  def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int, ts: TSMap[BDD, BDD]): BDD = {
+  def filterTrie(doms: Array[Set[Int]], modified: List[Int], depth: Int, ts: TSMap[BDD, BDD]): BDD = {
     if (modified.isEmpty) {
       this
     } else if (modified.head == depth) {
@@ -200,7 +200,7 @@ class BDDNode(val index: Int, val child: BDD, val sibling: BDD) extends BDD {
 
   }
 
-  def passTrie(ts: TSMap[BDD, BDD], doms: Array[MiniSet], modified: List[Int], depth: Int): BDD = {
+  def passTrie(ts: TSMap[BDD, BDD], doms: Array[Set[Int]], modified: List[Int], depth: Int): BDD = {
     ts.getOrElseUpdate(this, {
       val newChild = child.filterTrie(doms, modified, depth + 1, ts)
       val newSibling = sibling.passTrie(ts, doms, modified, depth)
@@ -214,10 +214,10 @@ class BDDNode(val index: Int, val child: BDD, val sibling: BDD) extends BDD {
     })
   }
 
-  def filterModifiedTrie(ts: TSMap[BDD, BDD], doms: Array[MiniSet], modified: List[Int], depth: Int): BDD = {
+  def filterModifiedTrie(ts: TSMap[BDD, BDD], doms: Array[Set[Int]], modified: List[Int], depth: Int): BDD = {
     ts.getOrElseUpdate(this, {
       val newSibling = sibling.filterModifiedTrie(ts, doms, modified, depth)
-      if (doms(depth).present(index)) {
+      if (doms(depth).contains(index)) {
         val newChild = child.filterTrie(doms, modified, depth + 1, ts)
         if (newChild.isEmpty) {
           newSibling
@@ -234,7 +234,7 @@ class BDDNode(val index: Int, val child: BDD, val sibling: BDD) extends BDD {
 
   override def isEmpty = false
 
-  protected[mdd] def fillFound(doms: Array[MiniSet], newDomains: Array[util.HashSet[Int]], sizes: Array[Int],
+  protected[mdd] def fillFound(doms: Array[Set[Int]], newDomains: Array[util.HashSet[Int]], sizes: Array[Int],
                                l: SetWithMax, depth: Int, ts: TSSet[BDD]): Unit = {
     ts.once(
       this,
@@ -271,20 +271,20 @@ object BDD0 extends BDD {
 
   def reduce(cache: collection.mutable.Map[BDD, BDD]) = BDD0
 
-  def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int, ts: TSMap[BDD, BDD]): BDD =
+  def filterTrie(doms: Array[Set[Int]], modified: List[Int], depth: Int, ts: TSMap[BDD, BDD]): BDD =
     this
 
-  def passTrie(ts: TSMap[BDD, BDD], doms: Array[MiniSet], modified: List[Int], depth: Int): BDD =
+  def passTrie(ts: TSMap[BDD, BDD], doms: Array[Set[Int]], modified: List[Int], depth: Int): BDD =
     this
 
-  def filterModifiedTrie(ts: TSMap[BDD, BDD], doms: Array[MiniSet], modified: List[Int], depth: Int): BDD =
+  def filterModifiedTrie(ts: TSMap[BDD, BDD], doms: Array[Set[Int]], modified: List[Int], depth: Int): BDD =
     this
 
-  def identify(i: Int) = id
+  def identify(i: Int): Int = id
 
   def depth(map: IdMap[BDD, Int]) = 0
 
-  def vertices(map: IdSet[BDD]) =
+  def vertices(map: IdSet[BDD]): Int =
     if (map.contains(this)) 0
     else {
       map.put(this)
@@ -299,7 +299,7 @@ object BDD0 extends BDD {
 
   def sibling = throw new UnsupportedOperationException("sibling of empty BDD")
 
-  protected[mdd] def fillFound(doms: Array[MiniSet], newDomains: Array[util.HashSet[Int]], sizes: Array[Int],
+  protected[mdd] def fillFound(doms: Array[Set[Int]], newDomains: Array[util.HashSet[Int]], sizes: Array[Int],
                                l: SetWithMax, depth: Int, cache: TSSet[BDD]): Unit = ()
 }
 
@@ -319,21 +319,21 @@ object BDDLeaf extends BDD {
 
   def reduce(cache: collection.mutable.Map[BDD, BDD]) = BDDLeaf
 
-  def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int, ts: TSMap[BDD, BDD]): BDD = {
+  def filterTrie(doms: Array[Set[Int]], modified: List[Int], depth: Int, ts: TSMap[BDD, BDD]): BDD = {
     this
   }
 
-  def passTrie(ts: TSMap[BDD, BDD], doms: Array[MiniSet], modified: List[Int], depth: Int): BDD =
+  def passTrie(ts: TSMap[BDD, BDD], doms: Array[Set[Int]], modified: List[Int], depth: Int): BDD =
     this
 
-  def filterModifiedTrie(ts: TSMap[BDD, BDD], doms: Array[MiniSet], modified: List[Int], depth: Int): BDD =
+  def filterModifiedTrie(ts: TSMap[BDD, BDD], doms: Array[Set[Int]], modified: List[Int], depth: Int): BDD =
     this
 
   override def isEmpty = false
 
   def depth(map: IdMap[BDD, Int]) = 1
 
-  def vertices(map: IdSet[BDD]) =
+  def vertices(map: IdSet[BDD]): Int =
     if (map.contains(this)) 0
     else {
       map.put(this)
@@ -348,7 +348,7 @@ object BDDLeaf extends BDD {
 
   def sibling = throw new UnsupportedOperationException("sibling of BDD leaf")
 
-  protected[mdd] def fillFound(doms: Array[MiniSet], newDomains: Array[util.HashSet[Int]], sizes: Array[Int],
+  protected[mdd] def fillFound(doms: Array[Set[Int]], newDomains: Array[util.HashSet[Int]], sizes: Array[Int],
                                l: SetWithMax, depth: Int, cache: TSSet[BDD]): Unit = {
     l.clearFrom(depth)
   }

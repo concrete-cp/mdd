@@ -122,7 +122,7 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
     m.vertices() shouldBe 8
     m.edges() shouldBe 11
 
-    val m2 = m.filterTrie(Array(MySet(1, 2, 3), MySet(1), MySet(1, 2, 3)), List(1))
+    val m2 = m.filterTrie(Array(Set(1, 2, 3), Set(1), Set(1, 2, 3)), List(1))
     withClue(m2.iterator.mkString(", ")) {
       m2.lambda() shouldBe 4
       m2.nodes() should have('size (5))

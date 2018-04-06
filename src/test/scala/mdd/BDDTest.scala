@@ -109,14 +109,14 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
       Array(3, 1, 3)))
       .reduce()
 
-    m.supported(Array.fill(3)(MySet(1, 2, 3)))
+    m.supported(Array.fill(3)(Set(1, 2, 3)))
 
     //println(l1)
 
-    val doms = Array[MiniSet](
-      MySet(1 to 3: _*),
-      MySet(1),
-      MySet(1 to 3: _*))
+    val doms = Array[Set[Int]](
+      Set(1 to 3: _*),
+      Set(1),
+      Set(1 to 3: _*))
 
     val n = m.filterTrie(doms, List(1))
 
@@ -146,12 +146,12 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
     val k = 5
     val l = .28
     val lambda = (l * math.pow(d, k)).toInt
-    var mddr = MDDGenerator(d, k, lambda, rand).reduce
+    var mddr = MDDGenerator(d, k, lambda, rand).reduce()
     var mddl = BDD(mddr)
 
     mddr.edges() shouldBe mddl.vertices() - 2
 
-    var doms = IndexedSeq.fill[MySet](k)(MySet(0 until d: _*))
+    var doms = IndexedSeq.fill[Set[Int]](k)(Set(0 until d: _*))
 
 
     while (mddr.nonEmpty && mddl.nonEmpty) {
@@ -207,7 +207,7 @@ final class BDDTest extends FlatSpec with Matchers with Inspectors {
 
     m.vertices() shouldBe 13
 
-    val m2 = m.filterTrie(Array(MySet(1, 2, 3), MySet(1), MySet(1, 2, 3)), List(1))
+    val m2 = m.filterTrie(Array(Set(1, 2, 3), Set(1), Set(1, 2, 3)), List(1))
 
     //println(m2.toList)
 

@@ -3,7 +3,7 @@ package mdd
 object TSSet {
   var ts = 0
 
-  def nextTS() = {
+  def nextTS(): Int = {
     val t = ts
     ts += 1
     t
@@ -38,7 +38,7 @@ class TSSet[A <: Timestampped[_]](val timestamp: Int = TSSet.nextTS()) {
 }
 
 trait Timestampped[A] {
-  var timestamp = -1
+  var timestamp: Int = -1
 }
 
 trait TSCached[A] extends Timestampped[A] {

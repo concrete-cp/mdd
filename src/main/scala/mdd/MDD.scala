@@ -179,7 +179,7 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
 
   def contains(t: Array[Int], i: Int = 0): Boolean
 
-  def findSupport(scope: Array[MiniSet], p: Int, i: Int, support: Array[Int], depth: Int = 0, cache: IdSet[MDD] = new IdSet): Option[Array[Int]]
+  def findSupport(scope: Array[Set[Int]], p: Int, i: Int, support: Array[Int], depth: Int = 0, cache: IdSet[MDD] = new IdSet): Option[Array[Int]]
 
   def edges(cache: IdSet[MDD] = new IdSet): Int
 
@@ -193,9 +193,9 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
       0)
   }
 
-  def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int = 0, cache: IdMap[MDD, MDD] = new IdMap): MDD
+  def filterTrie(doms: Array[Set[Int]], modified: List[Int], depth: Int = 0, cache: IdMap[MDD, MDD] = new IdMap): MDD
 
-  def supported(doms: Array[MiniSet], newDomains: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, cache: IdSet[MDD] = new IdSet): Unit
+  def supported(doms: Array[Set[Int]], newDomains: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, cache: IdSet[MDD] = new IdSet): Unit
 
   final def lambda(map: IdMap[MDD, BigInt] = new IdMap): BigInt = {
     if (this eq MDDLeaf) {
@@ -350,12 +350,12 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
       .getOrElse(Array())
   }
 
-  protected def checkSup(domains: Array[MiniSet], p: Int, i: Int, index: Int, next: MDD, support: Array[Int], depth: Int, cache: IdSet[MDD]): Option[Array[Int]] = {
+  protected def checkSup(domains: Array[Set[Int]], p: Int, i: Int, index: Int, next: MDD, support: Array[Int], depth: Int, cache: IdSet[MDD]): Option[Array[Int]] = {
     val ok =
       if (p == depth) {
         i == index
       } else {
-        domains(depth).present(index)
+        domains(depth).contains(index)
       }
     if (ok) {
       support(depth) = index
@@ -395,14 +395,14 @@ final class MDD1(private val child: MDD, private val index: Int) extends MDD {
     t(i) == index && child.contains(t, i + 1)
   }
 
-  def findSupport(scope: Array[MiniSet], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]): Option[Array[Int]] = {
+  def findSupport(scope: Array[Set[Int]], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]): Option[Array[Int]] = {
     ts.onceOrElse(
       this,
       checkSup(scope, p, i, index, child, support, depth, ts),
       None)
   }
 
-  def supported(doms: Array[MiniSet], newDomains: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit = {
+  def supported(doms: Array[Set[Int]], newDomains: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit = {
     ts.once(
       this,
       if (depth <= l.max) {
@@ -413,7 +413,7 @@ final class MDD1(private val child: MDD, private val index: Int) extends MDD {
     )
   }
 
-  def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int = 0, ts: IdMap[MDD, MDD]): MDD =
+  def filterTrie(doms: Array[Set[Int]], modified: List[Int], depth: Int = 0, ts: IdMap[MDD, MDD]): MDD =
     if (modified.isEmpty) {
       this
     } else {
@@ -421,7 +421,7 @@ final class MDD1(private val child: MDD, private val index: Int) extends MDD {
         val nC =
           if (modified.head == depth) {
             // Some change at this level
-            if (doms(depth).present(index)) {
+            if (doms(depth).contains(index)) {
               child.filterTrie(doms, modified.tail, depth + 1, ts)
             } else {
               MDD0
@@ -499,7 +499,7 @@ final class MDD2(
     case _ => false
   }
 
-  def supported(doms: Array[MiniSet], newDoms: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit =
+  def supported(doms: Array[Set[Int]], newDoms: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit =
     ts.once(
       this,
       if (depth <= l.max) {
@@ -510,7 +510,7 @@ final class MDD2(
         right.supported(doms, newDoms, depth + 1, l, ts)
       })
 
-  def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]): MDD =
+  def filterTrie(doms: Array[Set[Int]], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]): MDD =
     if (modified.isEmpty) {
       this
     } else ts.getOrElseUpdate(this, {
@@ -546,8 +546,8 @@ final class MDD2(
     })
 
   @inline
-  private def filteredTrie(doms: Array[MiniSet], modified: List[Int], depth: Int, t: MDD, i: Int, ts: IdMap[MDD, MDD]) = {
-    if (doms(depth).present(i)) {
+  private def filteredTrie(doms: Array[Set[Int]], modified: List[Int], depth: Int, t: MDD, i: Int, ts: IdMap[MDD, MDD]) = {
+    if (doms(depth).contains(i)) {
       t.filterTrie(doms, modified, depth + 1, ts)
     } else {
       MDD0
@@ -561,7 +561,7 @@ final class MDD2(
 
   override def isEmpty = false
 
-  def findSupport(scope: Array[MiniSet], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]) =
+  def findSupport(scope: Array[Set[Int]], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]) =
     ts.onceOrElse(
       this,
       checkSup(scope, p, i, leftI, left, support, depth, ts).orElse(
@@ -589,7 +589,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
 
       // Copy and shift
       val newTrie = new Array[MDD](math.max(v - newOffset, trie.length - newOffset + offset) + 1)
-      for (i <- 0 until trie.length) {
+      for (i <- trie.indices) {
         newTrie(i - newOffset + offset) = trie(i)
       }
 
@@ -617,7 +617,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     0 <= v && v < trie.length && (trie(v) ne null) && trie(v).contains(tuple, i + 1)
   }
 
-  def supported(doms: Array[MiniSet], newDomains: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit =
+  def supported(doms: Array[Set[Int]], newDomains: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit =
     ts.once(this, {
 
       forValues { i =>
@@ -634,7 +634,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     })
 
   private def forValues[U](f: Int => U): Unit = {
-    for (i <- 0 until trie.length) {
+    for (i <- trie.indices) {
       if (trie(i) ne null) {
         f(i + offset)
       }
@@ -651,7 +651,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     }
   }
 
-  def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]): MDD =
+  def filterTrie(doms: Array[Set[Int]], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]): MDD =
     if (modified.isEmpty) {
       this
     } else ts.getOrElseUpdate(this, {
@@ -701,13 +701,13 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     }
   }
 
-  private def filteredTrie(ts: IdMap[MDD, MDD], doms: Array[MiniSet], modified: List[Int], depth: Int): Array[MDD] = {
+  private def filteredTrie(ts: IdMap[MDD, MDD], doms: Array[Set[Int]], modified: List[Int], depth: Int): Array[MDD] = {
 
     val trie = this.trie
     val newTrie: Array[MDD] = new Array(trie.length)
 
     forSubtriesNoOffset { (i, mdd) =>
-      if (doms(depth).present(i + offset)) {
+      if (doms(depth).contains(i + offset)) {
         val uT = mdd.filterTrie(doms, modified, depth + 1, ts)
         if (uT ne MDD0) {
           newTrie(i) = uT
@@ -718,7 +718,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     newTrie
   }
 
-  private def passedTrie(ts: IdMap[MDD, MDD], doms: Array[MiniSet], modified: List[Int], depth: Int): Array[MDD] = {
+  private def passedTrie(ts: IdMap[MDD, MDD], doms: Array[Set[Int]], modified: List[Int], depth: Int): Array[MDD] = {
     val trie = this.trie
     val newTrie: Array[MDD] = new Array(trie.length)
     val nextDepth = depth + 1
@@ -755,7 +755,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
 
   override def isEmpty = false
 
-  def findSupport(scope: Array[MiniSet], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]): Option[Array[Int]] =
+  def findSupport(scope: Array[Set[Int]], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]): Option[Array[Int]] =
     ts.onceOrElse(
       this,
       if (depth == p) {
@@ -768,7 +768,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
       } else {
 
         forSubtries { (value, mdd) =>
-          if (scope(depth).present(value)) {
+          if (scope(depth).contains(value)) {
             support(depth) = value
             val s = mdd.findSupport(scope, p, i, support, depth + 1, ts)
             if (s.nonEmpty) return s
@@ -812,12 +812,12 @@ object MDDLeaf extends MDD {
 
   def edges(cache: IdSet[MDD]) = 0
 
-  def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]) = {
+  def filterTrie(doms: Array[Set[Int]], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]) = {
     assert(modified.isEmpty)
     this
   }
 
-  def supported(doms: Array[MiniSet], newDoms: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]) = {
+  def supported(doms: Array[Set[Int]], newDoms: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]) = {
     //assert(depth > l.max)
     //println("leaf at depth " + depth)
     l.clearFrom(depth)
@@ -838,7 +838,7 @@ object MDDLeaf extends MDD {
 
   override def isEmpty = false
 
-  def findSupport(scope: Array[MiniSet], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]) =
+  def findSupport(scope: Array[Set[Int]], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]) =
     Some(support)
 
   def subMDD(i: Int) = MDDLeaf
@@ -862,7 +862,7 @@ object MDDLeaf extends MDD {
   override def depth(cache: IdMap[MDD, Option[Int]]) = Some(0)
 }
 
-final object MDD0 extends MDD {
+object MDD0 extends MDD {
   override lazy val hashCode = 0
   id = 0
 
@@ -874,9 +874,9 @@ final object MDD0 extends MDD {
 
   def edges(cache: IdSet[MDD]) = 0
 
-  def filterTrie(doms: Array[MiniSet], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]) = MDD0
+  def filterTrie(doms: Array[Set[Int]], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]) = MDD0
 
-  def supported(doms: Array[MiniSet], nd: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]) = {
+  def supported(doms: Array[Set[Int]], nd: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]) = {
     throw new UnsupportedOperationException
   }
 
@@ -894,7 +894,7 @@ final object MDD0 extends MDD {
 
   override def isEmpty = true
 
-  def findSupport(scope: Array[MiniSet], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]) =
+  def findSupport(scope: Array[Set[Int]], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]) =
     None
 
   def subMDD(i: Int) = MDD0
