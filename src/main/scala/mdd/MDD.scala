@@ -48,9 +48,7 @@ object MDD {
     (i, Array(v))
   }
 
-  def fromTrie(t: Map[Int, MDD]): MDD = fromTrie(t.view)
-
-  def fromTrie(t: Traversable[(Int, MDD)]): MDD = {
+  def fromTrie(t: Iterable[(Int, MDD)]): MDD = {
     val s = t.toSeq
     assert(s.map(_._1).distinct.size == s.size)
     assert(s.forall(_._2.nonEmpty))
@@ -58,10 +56,10 @@ object MDD {
       case Seq() => MDD0
       case Seq((index, child)) => new MDD1(child, index)
       case Seq((i1, c1), (i2, c2)) => new MDD2(c1, i1, c2, i2)
-      case e: Any => {
+      case e: Any =>
         val (offset, trie) = newTrie(e: _*)
         new MDDn(offset, trie)
-      }
+
     }
   }
 
@@ -98,7 +96,7 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
     def traverse(n: MDD, i: Int): Int =
       if ((n eq MDDLeaf) || (n eq MDD0)) i
       else traversed.onceOrElse(n, {
-        val children = n.traverseST
+        val children = n.children
         val is = children.foldLeft(i) { case (i, (_, child)) => traverse(child, i) } + 1
         n.id = is
         is
@@ -108,11 +106,11 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
     traverse(this, 2)
   }
 
-  def traverseST: Traversable[(Int, MDD)] = new Traversable[(Int, MDD)] {
-    def foreach[A](f: ((Int, MDD)) => A) {
-      forSubtries { (i, mdd) => f((i, mdd)) }
-    }
-  }
+  //  def traverseST: Traversable[(Int, MDD)] = new Traversable[(Int, MDD)] {
+  //    def foreach[A](f: ((Int, MDD)) => A) {
+  //      forSubtries { (i, mdd) => f((i, mdd)) }
+  //    }
+  //  }
 
   @deprecated("+ and addTrie methods are too slow and deprecated, use MDD.apply or MDD.fromSeq instead", "1.3.0")
   def +(t: Seq[Int]): MDD = {
@@ -135,7 +133,7 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
 
       val idn = n.id
       if (common(idn) == null) {
-        val oldTrie = n.traverseST.toSeq
+        val oldTrie = n.children.toSeq
         val newTrie = for ((i, m) <- oldTrie) yield {
           i -> step2(m)
         }
@@ -163,10 +161,9 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
     def traverse(n: MDD, i: Int): Int =
       if ((n eq MDDLeaf) || (n eq MDD0)) i
       else traversed.onceOrElse(n, {
-        val children = n.traverseST
-        val is = children.foldLeft(i) { case (i, (_, child)) => traverse(child, i) }
+        val is = n.children.foldLeft(i) { case (j, (_, child)) => traverse(child, j) }
 
-        val id = children.view.map(c => (c._1, c._2.id)).toSeq
+        val id = n.children.map(c => (c._1, c._2.id)).toSeq
 
         val nid = cache.getOrElseUpdate(id, is + 1)
         n.id = nid
@@ -188,7 +185,7 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
       if (this eq MDDLeaf) {
         1
       } else {
-        1 + traverseST.map { case (_, m) => m.vertices(cache) }.sum
+        1 + children.map { case (_, m) => m.vertices(cache) }.sum
       },
       0)
   }
@@ -201,20 +198,20 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
     if (this eq MDDLeaf) {
       BigInt(1)
     } else {
-      map.getOrElseUpdate(this, traverseST.map { case (_, m) => m.lambda(map) }.sum)
+      map.getOrElseUpdate(this, children.map { case (_, m) => m.lambda(map) }.sum)
     }
   }
 
   def depth(map: IdMap[MDD, Option[Int]] = new IdMap): Option[Int] = {
     map.getOrElseUpdate(this, {
-      traverseST
+      children
         .flatMap { case (_, m) => m.depth(map) }
         .reduceOption(_ max _)
         .map(1 + _)
     })
   }
 
-  def forSubtries(f: (Int, MDD) => Unit): Unit
+  def children: Iterator[(Int, MDD)]
 
   override def isEmpty: Boolean
 
@@ -228,8 +225,8 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
   def nodes(map: IdSet[MDD] = new IdSet): IdSet[MDD] = {
     if (!map.contains(this)) {
       map.put(this)
-      for (node <- traverseST) {
-        node._2.nodes(map)
+      for ((_, node) <- children) {
+        node.nodes(map)
       }
     }
     map
@@ -237,9 +234,8 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
 
   def union(mdd: MDD, cache: BIdMap[MDD, MDD, MDD] = new BIdMap): MDD = {
     cache.getOrElseUpdate(this, mdd, {
-      val thisTrie = traverseST.toMap
-      val otherTrie = mdd.traverseST
-      val unionTrie = thisTrie ++ otherTrie.map { case (i, m) =>
+      val thisTrie = children.toMap
+      val unionTrie = thisTrie ++ mdd.children.map { case (i, m) =>
         i -> thisTrie.getOrElse(i, MDD0).union(m, cache)
       }
       MDD.fromTrie(unionTrie)
@@ -248,11 +244,12 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
 
   def intersect(mdd: MDD, cache: BIdMap[MDD, MDD, MDD] = new BIdMap): MDD = {
     cache.getOrElseUpdate(this, mdd, {
-      val interTrie = mdd.traverseST
+      val interTrie = mdd.children
         .map { case (i, m) =>
           i -> this.subMDD(i).intersect(m, cache)
         }
         .filter(_._2.nonEmpty)
+        .toSeq
       MDD.fromTrie(interTrie)
     })
   }
@@ -260,12 +257,14 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
   def project(c: Set[Int], k: Int = 0, mdds: IdMap[MDD, MDD] = new IdMap): MDD = {
     mdds.getOrElseUpdate(this, {
       if (c(k)) {
-        val newTrie = traverseST.map {
-          case (i, m) => i -> m.project(c, k + 1, mdds)
-        }
+        val newTrie = children
+          .map {
+            case (i, m) => i -> m.project(c, k + 1, mdds)
+          }
+          .toSeq
         MDD.fromTrie(newTrie)
       } else {
-        traverseST
+        children
           .map(e => e._2.project(c, k + 1, mdds))
           .reduceLeft(_ union _)
       }
@@ -277,9 +276,9 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
     require(this ne MDDLeaf)
     mdds.getOrElseUpdate(this, {
       if (depth == 0) {
-        traverseST.map(_._1).toSet
+        children.map(_._1).toSet
       } else {
-        traverseST.map { case (_, subMDD) => subMDD.projectOne(depth - 1, mdds) }.reduce(_ ++ _)
+        children.map { case (_, subMDD) => subMDD.projectOne(depth - 1, mdds) }.reduce(_ ++ _)
       }
     })
   }
@@ -289,8 +288,9 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
       if (pos == 0) {
         MDD.fromTrie(domain.map(i => i -> this))
       } else {
-        val trie = traverseST
+        val trie = children
           .map(e => e._1 -> e._2.insertDim(pos - 1, domain, mdds))
+          .toSeq
         MDD.fromTrie(trie)
       }
     })
@@ -302,20 +302,21 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
         this
       } else if (currentDepth == depths.head) {
         if (value == null) {
-          val trie = traverseST
+          val trie = children
             .map { case (v, e) => v -> e.merge(depths.tail, currentDepth + 1, v, mdds) }
+            .toSeq
           MDD.fromTrie(trie)
         } else {
-          traverseST
+          children
             .filter { case (v, _) => value == v }
             .map { case (_, e) => e.merge(depths.tail, currentDepth + 1, value, mdds) }
             .foldLeft[MDD](MDD0)(_ union _)
         }
 
       } else {
-        val trie = traverseST
+        val trie = children
           .map { case (v, e) => v -> e.merge(depths, currentDepth + 1, value, mdds) }
-
+          .toSeq
         MDD.fromTrie(trie)
 
       }
@@ -333,7 +334,7 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
           i + 1
         } else {
           var count0 = i
-          mdd.forSubtries { case (v, child) =>
+          for ((v, child) <- children) {
             val count = fill(child, count0, j + 1)
             while (count0 < count) {
               array(count0)(j) = v
@@ -370,9 +371,7 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
 final class MDD1(private val child: MDD, private val index: Int) extends MDD {
   assert(child.nonEmpty)
 
-  def forSubtries(f: (Int, MDD) => Unit): Unit = {
-    f(index, child)
-  }
+  def children = Iterator((index, child))
 
   def addTrie(t: Array[Int], i: Int): MDD =
     if (i >= t.length) {
@@ -441,13 +440,13 @@ final class MDD1(private val child: MDD, private val index: Int) extends MDD {
       })
     }
 
-  def iterator = child.iterator.map(index +: _)
+  def iterator: Iterator[Seq[Int]] = child.iterator.map(index +: _)
 
   def edges(cache: IdSet[MDD]): Int = cache.onceOrElse(this, 1 + child.edges(cache), 0)
 
   override def isEmpty = false
 
-  def subMDD(i: Int) = if (index == i) child else MDD0
+  def subMDD(i: Int): MDD = if (index == i) child else MDD0
 
 }
 
@@ -457,13 +456,15 @@ final class MDD2(
   assert(right.nonEmpty)
   assert(left.nonEmpty)
 
-  def forSubtries(f: (Int, MDD) => Unit): Unit = {
+  def children: Iterator[(Int, MDD)] = {
     if (leftI < rightI) {
-      f(leftI, left)
-      f(rightI, right)
+      Iterator(
+        (leftI, left),
+        (rightI, right))
     } else {
-      f(rightI, right)
-      f(leftI, left)
+      Iterator(
+        (rightI, right),
+        (leftI, left))
     }
   }
 
@@ -503,8 +504,8 @@ final class MDD2(
     ts.once(
       this,
       if (depth <= l.max) {
-        newDoms(depth).add( leftI)
-        newDoms(depth).add( rightI)
+        newDoms(depth).add(leftI)
+        newDoms(depth).add(rightI)
         if (newDoms(depth).size == doms(depth).size) l -= depth
         left.supported(doms, newDoms, depth + 1, l, ts)
         right.supported(doms, newDoms, depth + 1, l, ts)
@@ -561,14 +562,14 @@ final class MDD2(
 
   override def isEmpty = false
 
-  def findSupport(scope: Array[Set[Int]], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]) =
+  def findSupport(scope: Array[Set[Int]], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]): Option[Array[Int]] =
     ts.onceOrElse(
       this,
       checkSup(scope, p, i, leftI, left, support, depth, ts).orElse(
         checkSup(scope, p, i, rightI, right, support, depth, ts)),
       None)
 
-  def subMDD(i: Int) = i match {
+  def subMDD(i: Int): MDD = i match {
     case `leftI` => left
     case `rightI` => right
     case _ => MDD0
@@ -577,7 +578,7 @@ final class MDD2(
 
 final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends MDD {
 
-  assert(iterator.nonEmpty)
+  assert(iterator.hasNext)
   assert(trie.forall(m => (m eq null) || m.nonEmpty))
 
   def addTrie(tuple: Array[Int], i: Int): MDD = {
@@ -621,7 +622,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     ts.once(this, {
 
       forValues { i =>
-        newDomains(depth).add( i)
+        newDomains(depth).add(i)
       }
 
       if (newDomains(depth).size == doms(depth).size) l -= depth
@@ -638,16 +639,6 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
       if (trie(i) ne null) {
         f(i + offset)
       }
-    }
-  }
-
-  def forSubtriesNoOffset(f: (Int, MDD) => Unit): Unit = {
-    var i = 0
-    while (i < trie.length) {
-      if (trie(i) ne null) {
-        f(i, trie(i))
-      }
-      i += 1
     }
   }
 
@@ -731,6 +722,16 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     newTrie
   }
 
+  def forSubtriesNoOffset(f: (Int, MDD) => Unit): Unit = {
+    var i = 0
+    while (i < trie.length) {
+      if (trie(i) ne null) {
+        f(i, trie(i))
+      }
+      i += 1
+    }
+  }
+
   private def same(t1: Array[MDD], t2: Array[MDD]): Boolean = {
     def empty(t: Array[MDD], i: Int) = {
       i >= t.length || (t(i) eq null)
@@ -741,17 +742,23 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     }
   }
 
-  def iterator = traverseST.toIterator.flatMap {
+  def iterator: Iterator[Seq[Int]] = children.flatMap {
     case (i, t) => t.iterator map (i +: _)
   }
 
   def edges(ts: IdSet[MDD]): Int = ts.onceOrElse(this, {
     var e = 0
-    for ((_, mdd) <- traverseST) {
+    for ((_, mdd) <- children) {
       e += 1 + mdd.edges(ts)
     }
     e
   }, 0)
+
+  def children: Iterator[(Int, MDD)] = {
+    Iterator.range(0, trie.length)
+      .filter(i => trie(i) ne null)
+      .map(i => (i + offset, trie(i)))
+  }
 
   override def isEmpty = false
 
@@ -767,7 +774,7 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
         }
       } else {
 
-        forSubtries { (value, mdd) =>
+        for ((value, mdd) <- children) {
           if (scope(depth).contains(value)) {
             support(depth) = value
             val s = mdd.findSupport(scope, p, i, support, depth + 1, ts)
@@ -777,16 +784,6 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
         None
       },
       None)
-
-  def forSubtries(f: (Int, MDD) => Unit): Unit = {
-    var i = 0
-    while (i < trie.length) {
-      if (trie(i) ne null) {
-        f(i + offset, trie(i))
-      }
-      i += 1
-    }
-  }
 
   def subMDD(i: Int): MDD = {
     val v = i - offset
@@ -812,25 +809,25 @@ object MDDLeaf extends MDD {
 
   def edges(cache: IdSet[MDD]) = 0
 
-  def filterTrie(doms: Array[Set[Int]], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]) = {
+  def filterTrie(doms: Array[Set[Int]], modified: List[Int], depth: Int, ts: IdMap[MDD, MDD]): MDD = {
     assert(modified.isEmpty)
     this
   }
 
-  def supported(doms: Array[Set[Int]], newDoms: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]) = {
+  def supported(doms: Array[Set[Int]], newDoms: Array[util.HashSet[Int]], depth: Int, l: SetWithMax, ts: IdSet[MDD]): Unit = {
     //assert(depth > l.max)
     //println("leaf at depth " + depth)
     l.clearFrom(depth)
   }
 
-  def addTrie(tuple: Array[Int], i: Int) = {
+  def addTrie(tuple: Array[Int], i: Int): MDD = {
     require(i >= tuple.length)
     this //throw new UnsupportedOperationException
   }
 
   override def toString = "MDD Leaf"
 
-  def forSubtries(f: (Int, MDD) => Unit): Unit = {
+  def children  = {
     throw new UnsupportedOperationException
   }
 
@@ -841,13 +838,13 @@ object MDDLeaf extends MDD {
   def findSupport(scope: Array[Set[Int]], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]) =
     Some(support)
 
-  def subMDD(i: Int) = MDDLeaf
+  def subMDD(i: Int): MDD = MDDLeaf
 
-  override def union(m: MDD, cache: BIdMap[MDD, MDD, MDD]) = this
+  override def union(m: MDD, cache: BIdMap[MDD, MDD, MDD]): MDD = this
 
-  override def intersect(m: MDD, cache: BIdMap[MDD, MDD, MDD]) = m
+  override def intersect(m: MDD, cache: BIdMap[MDD, MDD, MDD]): MDD = m
 
-  override def project(c: Set[Int], k: Int, cache: IdMap[MDD, MDD]) = this
+  override def project(c: Set[Int], k: Int, cache: IdMap[MDD, MDD]): MDD = this
 
   override def insertDim(pos: Int, domain: Iterable[Int], mdds: IdMap[MDD, MDD]): MDD = {
     require(pos == 0)
@@ -890,7 +887,7 @@ object MDD0 extends MDD {
 
   override def toString = "Empty MDD"
 
-  def forSubtries(f: (Int, MDD) => Unit) = ()
+  def children = Iterator.empty
 
   override def isEmpty = true
 

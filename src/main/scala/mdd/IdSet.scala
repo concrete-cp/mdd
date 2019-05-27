@@ -1,11 +1,11 @@
 package mdd
 
-import java.util.IdentityHashMap
+import java.util
 
 import scala.collection.JavaConverters._
 
 final class IdSet[A] {
-  private val idMap = new IdentityHashMap[A, Unit]
+  private val idMap = new util.IdentityHashMap[A, Unit]
 
   def iterator: Iterator[A] = idMap.keySet.asScala.iterator
 
@@ -19,7 +19,7 @@ final class IdSet[A] {
   }
 
   def put(elem: A): Unit = {
-    idMap.put(elem, Unit)
+    idMap.put(elem, ())
   }
 
   def contains(elem: A): Boolean = idMap.containsKey(elem)
@@ -31,5 +31,5 @@ final class IdSet[A] {
     }
   }
 
-  def size = idMap.size
+  def size: Int = idMap.size
 }

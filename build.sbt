@@ -1,14 +1,14 @@
 name := "mdd"
 
-organization := "fr.univ-valenciennes"
+organization := "fr.uphf"
 
-version := "1.6"
+version := "2.0-SNAPSHOT"
 
-scalaVersion := "2.12.4"
+scalaVersion := "2.12.8"
 
 libraryDependencies ++= Seq(
-	"org.scalatest" %% "scalatest" % "3.0.4" % "test",
-	"org.scalacheck" %% "scalacheck" % "1.13.5" % "test"
+	"org.scalatest" %% "scalatest" % "3.0.7" % "test",
+	"org.scalacheck" %% "scalacheck" % "1.14.0" % "test"
 	)
 
 scalacOptions ++= Seq(
@@ -16,6 +16,7 @@ scalacOptions ++= Seq(
   , "-deprecation" 
 //	"-unchecked" 
     , "-Xlint" 
+   , "-target:jvm-1.8"
 //	
 //	"-feature"
 //	"-Yinline-warnings"

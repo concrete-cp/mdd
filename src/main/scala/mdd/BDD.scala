@@ -13,11 +13,11 @@ object BDD {
       if (n eq MDDLeaf) BDDLeaf
       else {
         map.getOrElseUpdate(n, {
-          assert(n.traverseST.toSeq.sliding(2).forall {
+          assert(n.children.sliding(2).forall {
             case Seq(_) => true
             case Seq(m1, m2) => m1._1 < m2._1
           })
-          n.traverseST.foldRight[BDD](BDD0) {
+          n.children.foldRight[BDD](BDD0) {
             case ((i, m), acc) => new BDDNode(i, mdd2bdd(m), acc)
           }
         })
@@ -112,7 +112,15 @@ sealed trait BDD extends Iterable[Seq[Int]] with TSCached[BDD] {
 
   def vertices(map: IdSet[BDD] = new IdSet()): Int
 
-  def edges(map: IdSet[BDD] = new IdSet()): Int
+  final def edges(map: TSSet[BDD] = new TSSet(), total: Int = 0): Int = {
+    if ((this eq BDD0) || (this eq BDDLeaf) || map.contains(this)) {
+      total
+    } else {
+      map.put(this)
+      // println(map.size + " " + total)
+      sibling.edges(map, child.edges(map, total + 2))
+    }
+  }
 
   def depth(map: IdMap[BDD, Int] = new IdMap()): Int
 
@@ -177,17 +185,18 @@ class BDDNode(val index: Int, val child: BDD, val sibling: BDD) extends BDD {
     case _ => false
   }
 
-  def depth(map: IdMap[BDD, Int]) = {
+  def depth(map: IdMap[BDD, Int]): Int = {
     map.getOrElseUpdate(this, 1 + math.max(child.depth(map), sibling.depth(map)))
   }
 
-  def vertices(map: IdSet[BDD]) =
-    map.onceOrElse(this, 1 + child.vertices(map) + sibling.vertices(map), 0)
-
-  def edges(map: IdSet[BDD]) =
-    map.onceOrElse(this,
-      2 + child.edges(map) + sibling.edges(map)
-      , 0)
+  def vertices(map: IdSet[BDD]): Int = {
+    if (map.contains(this)) {
+      0
+    } else {
+      map.put(this)
+      1 + child.vertices(map) + sibling.vertices(map)
+    }
+  }
 
   def filterTrie(doms: Array[Set[Int]], modified: List[Int], depth: Int, ts: TSMap[BDD, BDD]): BDD = {
     if (modified.isEmpty) {
@@ -291,8 +300,6 @@ object BDD0 extends BDD {
       1
     }
 
-  def edges(map: IdSet[BDD]) = 0
-
   def index = throw new UnsupportedOperationException("index of empty BDD")
 
   def child = throw new UnsupportedOperationException("child of empty BDD")
@@ -339,8 +346,6 @@ object BDDLeaf extends BDD {
       map.put(this)
       1
     }
-
-  def edges(map: IdSet[BDD]) = 0
 
   def index = throw new UnsupportedOperationException("index of BDD leaf")
 
