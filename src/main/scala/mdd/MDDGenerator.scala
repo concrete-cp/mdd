@@ -1,7 +1,7 @@
 package mdd
 
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 
@@ -36,7 +36,7 @@ object MDDGenerator {
   }
 
   /** max is inclusive */
-  def randBigInt(max: BigInt, r: Random) = {
+  def randBigInt(max: BigInt, r: Random): BigInt = {
     require(max >= 0, max)
     if (max < Int.MaxValue) {
       BigInt(r.nextInt(max.toInt + 1))
@@ -51,7 +51,7 @@ object MDDGenerator {
     }
   }
 
-  def tupleSplit(b: BigInt, d: Int, k: Int) = {
+  def tupleSplit(b: BigInt, d: Int, k: Int): Array[Int] = {
     val n = Array.ofDim[Int](k)
     var i = b
     var p = k - 1
@@ -64,7 +64,7 @@ object MDDGenerator {
     n
   }
 
-  def giveStructure(mdd: MDD, q: Double, rand: Random, ts: Int) = {
+  def giveStructure(mdd: MDD, q: Double, rand: Random, ts: Int): MDD = {
     val existing = new mutable.HashMap[Int, ArrayBuffer[MDD]]()
     val cache = new IdMap[MDD, MDD]
 

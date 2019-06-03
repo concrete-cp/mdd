@@ -334,7 +334,7 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
           i + 1
         } else {
           var count0 = i
-          for ((v, child) <- children) {
+          for ((v, child) <- mdd.children) {
             val count = fill(child, count0, j + 1)
             while (count0 < count) {
               array(count0)(j) = v

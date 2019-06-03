@@ -1,6 +1,6 @@
 name := "mdd"
 
-organization := "fr.uphf"
+organization := "com.github.concrete-cp"
 
 version := "2.0-SNAPSHOT"
 
