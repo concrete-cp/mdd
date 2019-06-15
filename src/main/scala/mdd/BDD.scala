@@ -151,7 +151,7 @@ sealed trait BDD extends Iterable[Seq[Int]] with TSCached[BDD] {
 class BDDNode(val index: Int, val child: BDD, val sibling: BDD) extends BDD {
   assert(child.nonEmpty)
 
-  def iterator = child.iterator.map(index +: _) ++ sibling.iterator
+  def iterator: Iterator[Seq[Int]] = child.iterator.map(index +: _) ++ sibling.iterator
 
   def +(e: List[Int]): BDD = {
     val h :: t = e
@@ -164,10 +164,10 @@ class BDDNode(val index: Int, val child: BDD, val sibling: BDD) extends BDD {
     }
   }
 
-  def lambda(map: IdMap[BDD, BigInt]) =
+  def lambda(map: IdMap[BDD, BigInt]): BigInt =
     map.getOrElseUpdate(this, child.lambda(map) + sibling.lambda(map))
 
-  def contains(e: Seq[Int]) = {
+  def contains(e: Seq[Int]): Boolean = {
     val h +: t = e
     if (h < index) {
       false

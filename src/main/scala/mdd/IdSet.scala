@@ -2,7 +2,7 @@ package mdd
 
 import java.util
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 final class IdSet[A] {
   private val idMap = new util.IdentityHashMap[A, Unit]

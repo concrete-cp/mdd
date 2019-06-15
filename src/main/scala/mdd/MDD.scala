@@ -17,7 +17,7 @@ object MDD {
     if (i < arity) {
       val trie = data
         .groupBy(tuple => tuple(i))
-        .mapValues(group => grouping(group, i + 1, arity))
+        .view.mapValues(group => grouping(group, i + 1, arity))
       MDD.fromTrie(trie)
     } else {
       MDDLeaf
@@ -30,7 +30,7 @@ object MDD {
     } else if (i < doms.length) {
       val grouped = data
         .groupBy(tuple => tuple(i))
-        .mapValues(fromStarred(_, doms, i + 1))
+        .view.mapValues(fromStarred(_, doms, i + 1))
 
       val child = grouped.getOrElse(Star, MDD0)
 
@@ -746,6 +746,12 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     case (i, t) => t.iterator map (i +: _)
   }
 
+  def children: Iterator[(Int, MDD)] = {
+    Iterator.range(0, trie.length)
+      .filter(i => trie(i) ne null)
+      .map(i => (i + offset, trie(i)))
+  }
+
   def edges(ts: IdSet[MDD]): Int = ts.onceOrElse(this, {
     var e = 0
     for ((_, mdd) <- children) {
@@ -753,12 +759,6 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     }
     e
   }, 0)
-
-  def children: Iterator[(Int, MDD)] = {
-    Iterator.range(0, trie.length)
-      .filter(i => trie(i) ne null)
-      .map(i => (i + offset, trie(i)))
-  }
 
   override def isEmpty = false
 
@@ -773,15 +773,13 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
           trie(i).findSupport(scope, p, i, support, depth + 1, ts)
         }
       } else {
-
-        for ((value, mdd) <- children) {
-          if (scope(depth).contains(value)) {
+        children
+          .filter { case (value, _) => scope(depth).contains(value) }
+          .flatMap { case (value, mdd) =>
             support(depth) = value
-            val s = mdd.findSupport(scope, p, i, support, depth + 1, ts)
-            if (s.nonEmpty) return s
+            mdd.findSupport(scope, p, i, support, depth + 1, ts)
           }
-        }
-        None
+          .nextOption()
       },
       None)
 
@@ -827,7 +825,7 @@ object MDDLeaf extends MDD {
 
   override def toString = "MDD Leaf"
 
-  def children  = {
+  def children = {
     throw new UnsupportedOperationException
   }
 

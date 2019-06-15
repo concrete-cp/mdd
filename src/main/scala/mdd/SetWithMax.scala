@@ -2,24 +2,24 @@ package mdd
 
 import java.util
 
-final class SetWithMax(length: Int) extends collection.mutable.Set[Int] with collection.mutable.SetLike[Int, SetWithMax] {
-  var max: Int = length - 1
+import scala.collection.mutable
+
+final class SetWithMax(length: Int) extends mutable.AbstractSet[Int]
+  //  with mutable.SetOps[Int, mutable.Set, SetWithMax]
+{
+
   private val candidates: util.BitSet = new util.BitSet(length)
+  var max: Int = _
 
-  candidates.set(0, length) //BitVector.filled(length)
+  clear()
 
-  override  def empty: SetWithMax = new SetWithMax(0)
+  // @inline def +=(i: Int): SetWithMax.this.type = addOne(i)
 
-  def +=(i: Int): SetWithMax.this.type = ???
+  def addOne(i: Int): SetWithMax.this.type = throw new UnsupportedOperationException
 
-  def -=(i: Int): SetWithMax.this.type = {
-    candidates.clear(i)
-
-    if (i == max) {
-      max = candidates.previousSetBit(max - 1)
-    }
-    //println(s"- $i -> $this")
-    this
+  override def clear(): Unit = {
+    max = length - 1
+    candidates.set(0, length)
   }
 
   def clearFrom(newMax: Int): Unit = {
@@ -29,11 +29,11 @@ final class SetWithMax(length: Int) extends collection.mutable.Set[Int] with col
     //println(s"clearFrom($newMax) -> $this")
   }
 
-  override def foreach[U](f: Int => U) {
+  override def foreach[U](f: Int => U): Unit = {
     var i = max
     while (i >= 0) {
       f(i)
-      i = candidates.previousSetBit(i-1)
+      i = candidates.previousSetBit(i - 1)
     }
   }
 
@@ -43,17 +43,31 @@ final class SetWithMax(length: Int) extends collection.mutable.Set[Int] with col
       if (!f(i)) {
         this -= i
       }
-      i = candidates.previousSetBit(i-1)
+      i = candidates.previousSetBit(i - 1)
     }
+    this
+  }
+
+  // @inline def -=(i: Int): SetWithMax.this.type = subtractOne(i)
+
+  def subtractOne(i: Int): SetWithMax.this.type = {
+    candidates.clear(i)
+
+    if (i == max) {
+      max = candidates.previousSetBit(max - 1)
+    }
+    //println(s"- $i -> $this")
     this
   }
 
   def iterator: Iterator[Int] = new Iterator[Int] {
     var i: Int = SetWithMax.this.max
+
     def hasNext: Boolean = i >= 0
+
     def next(): Int = {
       val c = i
-      i = candidates.previousSetBit(i-1)
+      i = candidates.previousSetBit(i - 1)
       c
     }
   }

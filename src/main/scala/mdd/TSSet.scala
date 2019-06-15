@@ -13,7 +13,7 @@ object TSSet {
 /**
   * Created by vion on 06/06/17.
   */
-class TSSet[A <: Timestampped[_]](val timestamp: Int = TSSet.nextTS()) {
+final class TSSet[A <: Timestampped[_]](val timestamp: Int = TSSet.nextTS()) {
   def onceOrElse[B](elem: A, op: => B, els: => B): B = {
     if (contains(elem)) {
       els
@@ -27,6 +27,7 @@ class TSSet[A <: Timestampped[_]](val timestamp: Int = TSSet.nextTS()) {
     elem.timestamp = timestamp
   }
 
+  @inline
   def contains(elem: A): Boolean = elem.timestamp == timestamp
 
   def once[U](elem: A, op: => U): Unit = {
@@ -45,7 +46,7 @@ trait TSCached[A] extends Timestampped[A] {
   var previous: A = _
 }
 
-class TSMap[A <: TSCached[B], B](val timestamp: Int = TSSet.nextTS()) {
+final class TSMap[A <: TSCached[B], B](val timestamp: Int = TSSet.nextTS()) {
   def getOrElseUpdate(k: A, els: => B): B = {
     if (contains(k)) {
       k.previous
@@ -61,6 +62,7 @@ class TSMap[A <: TSCached[B], B](val timestamp: Int = TSSet.nextTS()) {
     k.previous = v
   }
 
+  @inline
   def contains(k: A): Boolean = k.timestamp == timestamp
 
   def get(k: A): Option[B] = if (contains(k)) Some(k.previous) else None

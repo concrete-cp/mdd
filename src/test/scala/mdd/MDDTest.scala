@@ -2,9 +2,12 @@ package mdd
 
 import org.scalacheck.Gen
 import org.scalatest.concurrent.TimeLimits
-import org.scalatest.prop.PropertyChecks
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{FlatSpec, Inspectors, Matchers}
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import ScalaCheckPropertyChecks._
+
+import scala.util.{Failure, Success, Try}
 
 final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimits {
 
@@ -74,16 +77,15 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
     //m2.lambda() shouldBe BigInt(d).pow(k)
     // m2.edges() shouldBe (1 - BigInt(d).pow(k + 1)) / (1 - d) - 1
 
-    val t2 = System.nanoTime()
+    //val t2 = System.nanoTime()
     val m3 = m2.reduce()
-    val e2 = System.nanoTime()
+    //val e2 = System.nanoTime()
 
     // logger.info("MDD:"  + (e2 - t2) / 1e9)
 
     m3.lambda() shouldBe BigInt(d).pow(k)
     m3.edges() shouldBe d * k
   }
-
 
 
   it should "reduce twice and return same instance" in {
@@ -111,28 +113,28 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
       Array(3, 1, 3))
 
     m0.lambda() shouldBe 6
-    m0.nodes() should have('size (9))
+    m0.nodes() should have size 9
     m0.vertices() shouldBe 9
     m0.edges() shouldBe 13
 
     val m = m0.reduce()
 
     m.lambda() shouldBe 6
-    m.nodes() should have('size (8))
+    m.nodes() should have size 8
     m.vertices() shouldBe 8
     m.edges() shouldBe 11
 
     val m2 = m.filterTrie(Array(Set(1, 2, 3), Set(1), Set(1, 2, 3)), List(1))
     withClue(m2.iterator.mkString(", ")) {
       m2.lambda() shouldBe 4
-      m2.nodes() should have('size (5))
+      m2.nodes() should have size 5
       m2.edges() shouldBe 6
       m2.vertices() shouldBe 5
     }
 
     val m3 = m2.reduce()
     m3.lambda() shouldBe 4
-    m3.nodes() should have('size (4))
+    m3.nodes() should have size 4
     m3.vertices() shouldBe 4
     m3.edges() shouldBe 5
 
@@ -187,7 +189,7 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
   }
 
   it should "add starred tuples" in {
-    val tuples = load("tuples4")
+    val tuples = load("tuples4").get
     val doms = IndexedSeq.fill(16)(-1 to 14)
 
     val mdd = MDD.fromStarred(tuples, doms)
@@ -195,7 +197,7 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
   }
 
   it should "add many tuples" in {
-    val tuples = load("tuples")
+    val tuples = load("tuples").get
     val doms = projectDoms(tuples)
     val mdd = MDD.fromStarred(tuples, doms)
     mdd.lambda() shouldBe tuples.size
@@ -209,17 +211,25 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
     mdd.reduce().edges() shouldBe mdd2.reduce().edges()
   }
 
-  private def load(r: String): Seq[Array[Starrable]] = {
-    val source = Option(getClass.getResource(r)).getOrElse(throw new IllegalStateException(s"Resource $r not found")).toURI
-    scala.io.Source.fromFile(source, "UTF8")
-      .getLines
-      .map { l =>
-        l.split(",\\ *").map {
-          case "*" => Star
-          case i => ValueStar(i.toInt)
-        } : Array[Starrable]
+  private def load(r: String): Try[Seq[Array[Starrable]]] = {
+    Option(getClass.getResource(r))
+      .map(r => Success(r.toURI))
+      .getOrElse(Failure(new IllegalStateException(s"Resource $r not found")))
+      .flatMap { source =>
+        val bf = scala.io.Source.fromFile(source, "UTF8")
+        val result = Try(
+          bf.getLines
+            .map { l =>
+              l.split(",\\ *").map {
+                case "*" => Star
+                case i => ValueStar(i.toInt)
+              }: Array[Starrable]
+            }
+            .toList)
+        bf.close()
+        result
       }
-      .toSeq
+
 
   }
 
@@ -230,7 +240,7 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
   }
 
   it should "add many many tuples" in {
-    val tuples = load("tuples2")
+    val tuples = load("tuples2").get
     val doms = projectDoms(tuples)
 
     val mdd = MDD.fromStarred(tuples, doms)
@@ -244,7 +254,7 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
   }
 
   it should "add many starred tuples" in {
-    val tuples = load("tuples3")
+    val tuples = load("tuples3").get
     val doms = projectDoms(tuples)
 
     val mdd = MDD.fromStarred(tuples, doms)
@@ -296,7 +306,7 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
 
   it should "have same result with fromTraversable and fromStarred" in {
     val gen = Gen.listOf(Gen.listOfN(2, Gen.chooseNum(-1000, 1000)))
-    PropertyChecks.forAll(gen) { rel: Seq[Seq[Int]] =>
+    ScalaCheckPropertyChecks.forAll(gen) { rel: Seq[Seq[Int]] =>
       val relation = rel.distinct.map(_.toArray)
 
       val mdd1 = MDD.fromSeq(relation).reduce()
@@ -311,11 +321,11 @@ final class MDDTest extends FlatSpec with Matchers with Inspectors with TimeLimi
   }
 
   it should "be converted to array" in {
-    val uaa: Seq[Seq[Int]] = u.toArrayArray.view.map(_.toSeq)
+    val uaa: Seq[Seq[Int]] = u.toArrayArray.map(_.toSeq)
     val ua: Seq[Seq[Int]] = u.toSeq
     uaa should contain theSameElementsAs ua
 
-    val tsaa = ts.toArrayArray.view.map(_.toSeq)
+    val tsaa = ts.toArrayArray.map(_.toSeq)
     tsaa should contain theSameElementsAs ts.toSeq
   }
 

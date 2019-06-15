@@ -2,12 +2,12 @@ name := "mdd"
 
 organization := "com.github.concrete-cp"
 
-version := "2.0-SNAPSHOT"
+version := "2.0"
 
-scalaVersion := "2.12.8"
+scalaVersion := "2.13.0"
 
 libraryDependencies ++= Seq(
-	"org.scalatest" %% "scalatest" % "3.0.7" % "test",
+	"org.scalatest" %% "scalatest" % "3.0.8" % "test",
 	"org.scalacheck" %% "scalacheck" % "1.14.0" % "test"
 	)
 
