@@ -20,3 +20,9 @@ project/plugins/project/
 /.cache-tests
 /.classpath
 /.project
+
+# IntelliJ
+/.idea/
+
+# Emacs saves
+*~
