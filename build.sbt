@@ -2,35 +2,35 @@ name := "mdd"
 
 organization := "com.github.concrete-cp"
 
-version := "2.0"
+version := "2.1"
 
 scalaVersion := "2.13.0"
 
 libraryDependencies ++= Seq(
-	"org.scalatest" %% "scalatest" % "3.0.8" % "test",
-	"org.scalacheck" %% "scalacheck" % "1.14.0" % "test"
-	)
+  "org.scalatest" %% "scalatest" % "3.0.8" % "test",
+  "org.scalacheck" %% "scalacheck" % "1.14.0" % "test"
+)
 
 scalacOptions ++= Seq(
-   "-Xdisable-assertions"
-  , "-deprecation" 
-//	"-unchecked" 
-    , "-Xlint" 
-   , "-target:jvm-1.8"
-//	
-//	"-feature"
-//	"-Yinline-warnings"
+  "-Xdisable-assertions",
+  "-deprecation",
+  //	"-unchecked"
+  "-Xlint",
+  "-target:jvm-1.8",
+  //
+  //	"-feature"
+  //	"-Yinline-warnings"
 )
 
 //wartremoverWarnings ++= Warts.all
 
 
-publishTo :=  {
+publishTo := {
   val nexus = "https://oss.sonatype.org/"
   if (isSnapshot.value)
     Some("snapshots" at nexus + "content/repositories/snapshots")
   else
-    Some("releases"  at nexus + "service/local/staging/deploy/maven2")
+    Some("releases" at nexus + "service/local/staging/deploy/maven2")
 }
 
 publishArtifact in Test := false
@@ -51,13 +51,13 @@ pomExtra in Global := {
     <url>github.com/concrete-cp/mdd.git</url>
   </scm>
 
-  <developers>
-    <developer>
-      <id>scand1sk</id>
-      <name>Julien Vion</name>
-      <url>http://vion.free.fr/perso</url>
-    </developer>
-  </developers>
+    <developers>
+      <developer>
+        <id>scand1sk</id>
+        <name>Julien Vion</name>
+        <url>http://vion.free.fr/perso</url>
+      </developer>
+    </developers>
 }
 
 testOptions in Test += Tests.Argument("-oDF")

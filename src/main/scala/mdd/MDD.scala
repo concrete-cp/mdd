@@ -213,8 +213,6 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
 
   def children: Iterator[(Int, MDD)]
 
-  override def isEmpty: Boolean
-
   override def equals(o: Any): Boolean = throw new UnsupportedOperationException
 
   def subMDD(i: Int): MDD
@@ -278,7 +276,8 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
       if (depth == 0) {
         children.map(_._1).toSet
       } else {
-        children.map { case (_, subMDD) => subMDD.projectOne(depth - 1, mdds) }.reduce(_ ++ _)
+        children.map { case (_, subMDD) => subMDD.projectOne(depth - 1, mdds) }
+          .fold(Set.empty)(_ ++ _)
       }
     })
   }
@@ -364,6 +363,11 @@ trait MDD extends Iterable[Seq[Int]] with Timestampped[MDD] {
     } else {
       None
     }
+  }
+
+  override def isEmpty: Boolean = {
+    assert((this eq MDD0) || iterator.hasNext)
+    this eq MDD0
   }
 
 }
@@ -578,8 +582,8 @@ final class MDD2(
 
 final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends MDD {
 
-  assert(iterator.hasNext)
   assert(trie.forall(m => (m eq null) || m.nonEmpty))
+  assert(trie.exists(m => m ne null))
 
   def addTrie(tuple: Array[Int], i: Int): MDD = {
     if (i >= tuple.length) {
@@ -666,6 +670,13 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
 
   private def newNode(t: Array[MDD]): MDD = {
     var i = t.length - 1
+    while (i >= 0) {
+      if (t(i) eq MDD0) {
+        t(i) = null
+      }
+      i -= 1
+    }
+    i = t.length - 1
     while (i >= 0 && (t(i) eq null)) {
       i -= 1
     }
@@ -709,6 +720,16 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     newTrie
   }
 
+  def forSubtriesNoOffset(f: (Int, MDD) => Unit): Unit = {
+    var i = 0
+    while (i < trie.length) {
+      if (trie(i) ne null) {
+        f(i, trie(i))
+      }
+      i += 1
+    }
+  }
+
   private def passedTrie(ts: IdMap[MDD, MDD], doms: Array[Set[Int]], modified: List[Int], depth: Int): Array[MDD] = {
     val trie = this.trie
     val newTrie: Array[MDD] = new Array(trie.length)
@@ -720,16 +741,6 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
       }
     }
     newTrie
-  }
-
-  def forSubtriesNoOffset(f: (Int, MDD) => Unit): Unit = {
-    var i = 0
-    while (i < trie.length) {
-      if (trie(i) ne null) {
-        f(i, trie(i))
-      }
-      i += 1
-    }
   }
 
   private def same(t1: Array[MDD], t2: Array[MDD]): Boolean = {
@@ -746,12 +757,6 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     case (i, t) => t.iterator map (i +: _)
   }
 
-  def children: Iterator[(Int, MDD)] = {
-    Iterator.range(0, trie.length)
-      .filter(i => trie(i) ne null)
-      .map(i => (i + offset, trie(i)))
-  }
-
   def edges(ts: IdSet[MDD]): Int = ts.onceOrElse(this, {
     var e = 0
     for ((_, mdd) <- children) {
@@ -759,8 +764,6 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
     }
     e
   }, 0)
-
-  override def isEmpty = false
 
   def findSupport(scope: Array[Set[Int]], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]): Option[Array[Int]] =
     ts.onceOrElse(
@@ -783,6 +786,12 @@ final class MDDn(private val offset: Int, private val trie: Array[MDD]) extends 
       },
       None)
 
+  def children: Iterator[(Int, MDD)] = {
+    Iterator.range(0, trie.length)
+      .filter(i => trie(i) ne null)
+      .map(i => (i + offset, trie(i)))
+  }
+
   def subMDD(i: Int): MDD = {
     val v = i - offset
     if (v < 0 || v >= trie.length || (trie(v) eq null)) {
@@ -803,7 +812,7 @@ object MDDLeaf extends MDD {
   //override def reduce(mdds: collection.mutable.Map[Map[Int, MDD], MDD]) = this
   def contains(tuple: Array[Int], i: Int) = true
 
-  def iterator = Iterator(Nil)
+  def iterator: Iterator[Seq[Int]] = Iterator.single(Nil)
 
   def edges(cache: IdSet[MDD]) = 0
 
@@ -830,8 +839,6 @@ object MDDLeaf extends MDD {
   }
 
   override def size = 1
-
-  override def isEmpty = false
 
   def findSupport(scope: Array[Set[Int]], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]) =
     Some(support)
@@ -865,7 +872,7 @@ object MDD0 extends MDD {
 
   def contains(tuple: Array[Int], i: Int) = false
 
-  def iterator = Iterator()
+  def iterator = throw new IllegalStateException("Iterating MDD0") //Iterator()
 
   def edges(cache: IdSet[MDD]) = 0
 
@@ -886,8 +893,6 @@ object MDD0 extends MDD {
   override def toString = "Empty MDD"
 
   def children = Iterator.empty
-
-  override def isEmpty = true
 
   def findSupport(scope: Array[Set[Int]], p: Int, i: Int, support: Array[Int], depth: Int, ts: IdSet[MDD]) =
     None
